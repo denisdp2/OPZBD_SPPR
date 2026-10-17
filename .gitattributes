@@ -1,0 +1,8 @@
+# Одинаковые переводы строк у всех, кто работает на Windows и Linux
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.xlsx binary
+*.xls binary
+*.png binary
+*.db binary

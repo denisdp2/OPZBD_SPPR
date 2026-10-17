@@ -1,0 +1,56 @@
+name: Release
+
+# Сборка портативной версии под Windows и Linux.
+#   * вручную: Actions → Release → Run workflow (архивы в артефактах запуска);
+#   * по тегу: git tag v0.1.0 && git push origin v0.1.0 (архивы в Releases).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  PYTHONUTF8: "1"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Сборка (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux собираем на старой Ubuntu: бинарник работает на этой версии и новее.
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[build]"
+      - run: python scripts/build.py
+      - name: Проверка запуска собранной программы
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then BIN=dist/SZI-windows/szi/szi.exe; else BIN=dist/SZI-linux/szi/szi; fi
+          "$BIN" --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SZI-${{ runner.os }}
+          path: dist/SZI-*.zip
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
