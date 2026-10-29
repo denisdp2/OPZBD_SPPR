@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101f3e">
+  <meta name="description" content="Вход в учётную запись">
+  <title>Вход</title>
+  <link rel="stylesheet" href="/static/assets/css/auth.css">
+  <script type="module" src="/static/assets/js/pages/auth-page.js"></script>
+</head>
+<body>
+  <main class="page-shell">
+    <section class="auth-panel" aria-label="Формы учётной записи">
+      <div class="auth-content">
+        <div class="auth-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5.2c0 4.4-2.8 7.9-7 9.7-4.2-1.8-7-5.3-7-9.7V6l7-3Z" stroke="currentColor" stroke-width="1.7"/><path d="m9 11.8 2 2 4-4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <div class="auth-tabs" role="tablist" aria-label="Действия с учётной записью">
+          <button class="auth-tab is-active" type="button" role="tab" aria-selected="true" data-view="login">Войти</button>
+          <button class="auth-tab" type="button" role="tab" aria-selected="false" data-view="register">Регистрация</button>
+        </div>
+
+        <section class="form-view is-visible" id="login-view" aria-labelledby="login-title">
+          <div class="form-intro">
+            <h2 id="login-title">Войти в аккаунт</h2>
+            <p>Введите логин и пароль.</p>
+          </div>
+          <form id="login-form" novalidate>
+            <label class="field-label" for="login-name">Логин</label>
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 20c.7-3.5 3.3-5.5 7.5-5.5s6.8 2 7.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              <input id="login-name" name="login" type="text" placeholder="Введите логин" autocomplete="username" required maxlength="64">
+            </div>
+
+            <div class="label-row"><label class="field-label" for="login-password">Пароль</label><button class="text-link small-link" type="button" data-view="forgot">Забыли пароль?</button></div>
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              <input id="login-password" name="password" type="password" placeholder="Введите пароль" autocomplete="current-password" required>
+              <button class="password-toggle" type="button" data-password-toggle="login-password" aria-label="Показать пароль">Показать</button>
+            </div>
+
+            <button class="submit-button" type="submit"><span>Войти в систему</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 12h14m-5.5-5.5 5.5 5.5-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="form-message" id="login-message" role="status" aria-live="polite" hidden></div>
+          </form>
+          <p class="form-switch">Впервые здесь? <button type="button" class="text-link" data-view="register">Создать аккаунт</button></p>
+        </section>
+
+        <section class="form-view" id="register-view" aria-labelledby="register-title" hidden>
+          <div class="form-intro">
+            <h2 id="register-title">Создать аккаунт</h2>
+            <p>Придумайте логин и пароль.</p>
+          </div>
+          <form id="register-form" novalidate>
+            <label class="field-label" for="register-name">Логин</label>
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 20c.7-3.5 3.3-5.5 7.5-5.5s6.8 2 7.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              <input id="register-name" name="login" type="text" placeholder="Придумайте логин" autocomplete="username" required minlength="3" maxlength="64">
+            </div>
+            <p class="field-hint">Не менее 3 символов.</p>
+
+            <label class="field-label" for="register-password">Пароль</label>
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              <input id="register-password" name="password" type="password" placeholder="Придумайте пароль" autocomplete="new-password" required minlength="8">
+              <button class="password-toggle" type="button" data-password-toggle="register-password" aria-label="Показать пароль">Показать</button>
+            </div>
+            <p class="field-hint">Не менее 8 символов.</p>
+
+            <button class="submit-button" type="submit"><span>Создать аккаунт</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 12h14m-5.5-5.5 5.5 5.5-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="form-message" id="register-message" role="status" aria-live="polite" hidden></div>
+          </form>
+          <p class="form-switch">Уже зарегистрированы? <button type="button" class="text-link" data-view="login">Войти</button></p>
+        </section>
+
+        <section class="form-view" id="forgot-view" aria-labelledby="forgot-title" hidden>
+          <button class="back-link" type="button" data-view="login"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19.5 12h-14m5.5 5.5L5.5 12 11 6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Назад ко входу</button>
+          <div class="recovery-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="7" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="m5 8 7 5.5L19 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5 4.5h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+          <div class="form-intro">
+            <h2 id="forgot-title">Забыли пароль?</h2>
+            <p>Укажите логин для восстановления доступа.</p>
+          </div>
+          <form id="forgot-form" novalidate>
+            <label class="field-label" for="forgot-name">Логин</label>
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 20c.7-3.5 3.3-5.5 7.5-5.5s6.8 2 7.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              <input id="forgot-name" name="login" type="text" placeholder="Введите логин" autocomplete="username" required maxlength="64">
+            </div>
+            <button class="submit-button" type="submit"><span>Восстановить доступ</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 12h14m-5.5-5.5 5.5 5.5-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="form-message" id="forgot-message" role="status" aria-live="polite" hidden></div>
+          </form>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
