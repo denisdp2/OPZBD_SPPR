@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="auth-body">
+  <form class="auth-card" id="login-form">
+    <p class="eyebrow">СППР. Админ-панель </p>
+    <h1>Вход в систему</h1>
+    <div class="flash" id="flash"></div>
+    <label for="login">Логин</label>
+    <input id="login" name="login" autocomplete="username" required>
+    <label for="password">Пароль</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button class="btn wide" type="submit">Войти</button>
+  </form>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/login.js"></script>
+</body>
+</html>

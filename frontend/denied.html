@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Нет доступа</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="auth-body">
+  <div class="auth-card">
+    <h1>Панель администратора недоступна</h1>
+    <button class="btn wide" id="logout" type="button">Выйти</button>
+  </div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    SZI.me()
+      .then((user) => {
+        if (user.role === "admin") {
+          window.location.replace("/admin");
+          return;
+        }
+        document.getElementById("who").textContent =
+          `Вы вошли как «${user.login}». У обычного пользователя нет доступа к админ-панели`;
+      })
+      .catch(() => window.location.replace("/"));
+    document.getElementById("logout").addEventListener("click", async () => {
+      await SZI.logout();
+      window.location.replace("/");
+    });
+  </script>
+</body>
+</html>

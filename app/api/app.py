@@ -6,11 +6,14 @@
 
 from collections.abc import Callable
 
-from fastapi import APIRouter, FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__, paths
+from app.auth.deps import COOKIE_NAME, current_user, require_admin
+from app.auth.schemas import AuthUser, LoginRequest
+from app.auth.store import AuthStore, User
 from app.core.interfaces import Repository
 from app.core.models import (
     DataBundle,
@@ -37,8 +40,11 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="СППР: подбор средств и мер защиты", version=__version__)
     app.state.repo = repo
+    auth = AuthStore(paths.data_dir() / "auth.sqlite3")
+    auth.init()
+    app.state.auth = auth
     api = APIRouter(prefix="/api")
-    admin = APIRouter(prefix="/api/admin", tags=["admin"])
+    admin = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
     # ------------------------------------------------------------------ #
     #  Служебное
@@ -54,6 +60,37 @@ def create_app(
             raise HTTPException(status_code=501, detail="Недоступно в этом режиме запуска")
         on_shutdown()
         return {"status": "stopping"}
+
+    # ------------------------------------------------------------------ #
+    #  Вход / роли
+    # ------------------------------------------------------------------ #
+    @api.post("/auth/login", tags=["auth"])
+    def login(body: LoginRequest, response: Response) -> AuthUser:
+        user = app.state.auth.authenticate(body.login, body.password)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+        token = app.state.auth.create_session(user)
+        response.set_cookie(
+            COOKIE_NAME,
+            token,
+            httponly=True,
+            samesite="lax",
+            max_age=int(12 * 60 * 60),
+            path="/",
+        )
+        return AuthUser(id=user.id, login=user.login, role=user.role)
+
+    @api.post("/auth/logout", tags=["auth"])
+    def logout(request: Request, response: Response) -> dict:
+        app.state.auth.delete_session(request.cookies.get(COOKIE_NAME))
+        response.delete_cookie(COOKIE_NAME, path="/")
+        return {"status": "ok"}
+
+    @api.get("/auth/me", tags=["auth"])
+    def me(user: User | None = Depends(current_user)) -> AuthUser:
+        if user is None:
+            raise HTTPException(status_code=401, detail="Нужна авторизация")
+        return AuthUser(id=user.id, login=user.login, role=user.role)
 
     # ------------------------------------------------------------------ #
     #  Справочники
@@ -157,5 +194,17 @@ def create_app(
         @app.get("/", include_in_schema=False)
         def index() -> FileResponse:
             return FileResponse(front / "index.html")
+
+        @app.get("/admin", include_in_schema=False)
+        def admin_page() -> FileResponse:
+            return FileResponse(front / "admin.html")
+
+        @app.get("/denied", include_in_schema=False)
+        def denied_page() -> FileResponse:
+            return FileResponse(front / "denied.html")
+
+        @app.get("/admin/", include_in_schema=False)
+        def admin_slash() -> RedirectResponse:
+            return RedirectResponse("/admin")
 
     return app
