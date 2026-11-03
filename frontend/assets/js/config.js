@@ -3,7 +3,7 @@
  * Set authMode to "rest" only after matching endpoints exist in the FastAPI app.
  */
 export const APP_CONFIG = Object.freeze({
-  apiBaseUrl: "/api/v1",
+  apiBaseUrl: "/api",
   workspaceApiBaseUrl: "/api",
   authMode: "mock", // "mock" | "rest"
 });
