@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f9">
+  <meta name="description" content="Подбор средств и организационных мер защиты информации">
+  <title>Сценарий и состав — СППР</title>
+  <link rel="stylesheet" href="/static/assets/css/workspace.css">
+  <script type="module" src="/static/assets/js/pages/workspace-page.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/static/workspace.html" aria-label="СППР — сценарий защиты">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5.2c0 4.4-2.8 7.9-7 9.7-4.2-1.8-7-5.3-7-9.7V6l7-3Z" stroke="currentColor" stroke-width="1.7"/><path d="m9 11.8 2 2 4-4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="brand-copy"><strong>СППР</strong><small>Подбор защиты</small></span>
+      </a>
+
+      <div class="nav-caption">РАСЧЁТ</div>
+      <nav class="side-nav" aria-label="Основная навигация">
+        <button class="nav-link is-active" type="button" data-page="builder">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5.5h16M4 12h16M4 18.5h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="5.5" r="2" fill="white" stroke="currentColor" stroke-width="1.7"/><circle cx="15.5" cy="12" r="2" fill="white" stroke="currentColor" stroke-width="1.7"/><circle cx="10.5" cy="18.5" r="2" fill="white" stroke="currentColor" stroke-width="1.7"/></svg>
+          <span>Сценарий и состав</span><span class="nav-count" id="nav-selected-count">0</span>
+        </button>
+        <button class="nav-link" type="button" data-page="evaluation">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 3.5h10l4 4v13H5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14.5 3.8v4h4M8 12h8M8 15.5h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span>Оценка набора</span>
+        </button>
+        <button class="nav-link" type="button" data-page="optimization">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 19.5V4.5M4 19.5h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m7 15 4-4 3 2 5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="19" cy="7" r="1.5" fill="currentColor"/></svg>
+          <span>Оптимизация</span>
+        </button>
+        <button class="nav-link" type="button" data-page="overview">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.4" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="3.5" width="7" height="4" rx="1.2" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.4" stroke="currentColor" stroke-width="1.7"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4" stroke="currentColor" stroke-width="1.7"/></svg>
+          <span>Обзор</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="sidebar-help">
+          <span class="help-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M9.5 9a2.6 2.6 0 1 1 4.5 1.8c-1.2 1-2 1.3-2 2.7M12 17h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          <strong>Как начать</strong>
+          <p>Выберите профиль, оставьте нужные требования и добавьте позиции, которые можно рассматривать в расчёте.</p>
+          <button type="button" class="text-button" data-page="builder">К сценарию <span aria-hidden="true">→</span></button>
+        </div>
+        <button class="profile-button" type="button" id="logout-button" title="Вернуться ко входу">
+          <span class="avatar">П</span><span class="profile-copy"><strong>Пользователь</strong><small>Локальная сессия интерфейса</small></span>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 17 15 12 10 7M15 12H4M20 4v16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button type="button" class="mobile-menu" id="mobile-menu" aria-label="Открыть меню"><svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        <div class="breadcrumb"><span>Расчёт</span><span class="breadcrumb-sep">/</span><strong id="breadcrumb-current">Сценарий и состав</strong></div>
+        <div class="topbar-actions">
+          <span class="api-status" id="api-status"><span class="status-dot"></span><span>Проверка соединения</span></span>
+          <button type="button" class="icon-button" id="refresh-data" aria-label="Обновить справочники" title="Обновить справочники"><svg viewBox="0 0 24 24" fill="none"><path d="M20 7v5h-5M4 17v-5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 9a7 7 0 0 1 12-2L20 12M4 12l2.5 5a7 7 0 0 0 12-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+      </header>
+
+      <div class="content-wrap">
+        <div id="data-notice" class="data-notice" hidden role="status">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 10.5v5M12 7.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span>Для просмотра отображаются примерные справочники. Результаты локального расчёта не являются серверным результатом.</span>
+          <button type="button" class="notice-close" id="notice-close" aria-label="Скрыть сообщение">×</button>
+        </div>
+
+        <section class="page-section" id="page-overview" data-page-section="overview" hidden>
+          <div class="page-heading heading-with-action">
+            <div><p class="eyebrow">ТЕКУЩИЙ СЦЕНАРИЙ</p><h1>Обзор расчёта</h1><p class="page-subtitle">Сводка выбранных требований, кандидатов и последней оценки.</p></div>
+            <button class="button button-primary" type="button" data-page="builder"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Изменить сценарий</button>
+          </div>
+          <div class="stat-grid">
+            <article class="stat-card"><div class="stat-top"><span class="stat-label">Требования в расчёте</span><span class="stat-icon icon-blue"><svg viewBox="0 0 24 24" fill="none"><path d="M7 4.5h10M7 8.5h10M7 12.5h6M5 3.5h14v17H5z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><strong class="stat-value" id="stat-requirements">0</strong><span class="stat-foot">Выбранная область оценки</span></article>
+            <article class="stat-card"><div class="stat-top"><span class="stat-label">Обязательные</span><span class="stat-icon icon-violet"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5.2c0 4.4-2.8 7.9-7 9.7-4.2-1.8-7-5.3-7-9.7V6l7-3Z" stroke="currentColor" stroke-width="1.7"/></svg></span></div><strong class="stat-value" id="stat-mandatory">0</strong><span class="stat-foot">По выбранному профилю</span></article>
+            <article class="stat-card"><div class="stat-top"><span class="stat-label">Позиций-кандидатов</span><span class="stat-icon icon-green"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/></svg></span></div><strong class="stat-value" id="stat-items">0</strong><span class="stat-foot">Средства и организационные меры</span></article>
+            <article class="stat-card stat-card-cost"><div class="stat-top"><span class="stat-label">Стоимость за период</span><span class="stat-icon icon-amber"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3v18M17 7.5c0-1.7-2.2-3-5-3s-5 1.3-5 3 2 2.7 5 3.2 5 1.4 5 3.3-2.2 3-5 3-5-1.3-5-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span></div><strong class="stat-value" id="stat-cost">0 ₽</strong><span class="stat-foot" id="stat-period">За 12 мес.</span></article>
+          </div>
+          <div class="overview-grid">
+            <article class="panel coverage-panel">
+              <div class="panel-heading"><div><h2>Последняя оценка</h2><p>Состояние обязательных требований</p></div><button type="button" class="button button-quiet button-small" data-page="evaluation">Оценка <span aria-hidden="true">→</span></button></div>
+              <div class="coverage-summary"><div class="coverage-ring" id="coverage-ring" style="--coverage:0"><div><strong id="coverage-percent">0%</strong><span>покрыто</span></div></div><div class="coverage-legend"><div><span class="legend-dot dot-green"></span><span>Закрыто требований</span><strong id="covered-count">—</strong></div><div><span class="legend-dot dot-gray"></span><span>Не закрыто</span><strong id="uncovered-count">—</strong></div><div><span class="legend-dot dot-blue"></span><span>Обязательных</span><strong id="coverage-mandatory-count">0</strong></div></div></div>
+              <div class="panel-divider"></div>
+              <div class="mandatory-indicator" id="mandatory-indicator"><span class="indicator-mark">i</span><div><strong id="mandatory-status-title">Оцените текущий набор</strong><p id="mandatory-status-text">После расчёта здесь появится результат проверки обязательных требований.</p></div></div>
+            </article>
+            <article class="panel selected-summary-panel">
+              <div class="panel-heading"><div><h2>Кандидаты</h2><p>Позиции, из которых собирается вариант решения</p></div><button type="button" class="button button-quiet button-small" data-page="builder">Изменить</button></div>
+              <div id="overview-selected-list" class="mini-item-list"></div>
+              <div class="selected-summary-footer"><span>Стоимость за выбранный период</span><strong id="overview-total-cost">0 ₽</strong></div>
+            </article>
+          </div>
+          <div class="section-heading"><div><h2>Дальнейшие действия</h2><p>Оценка и оптимизация — два отдельных расчёта.</p></div></div>
+          <div class="action-grid">
+            <button class="action-card" type="button" data-page="builder"><span class="action-icon icon-blue"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5h16M4 12h16M4 18.5h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="action-copy"><strong>Изменить сценарий</strong><small>Профиль, требования, период и стоимость.</small></span><span class="action-arrow">→</span></button>
+            <button class="action-card" type="button" data-page="evaluation"><span class="action-icon icon-green"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="action-copy"><strong>Оценить набор</strong><small>Проверить покрытие и общую стоимость.</small></span><span class="action-arrow">→</span></button>
+            <button class="action-card" type="button" data-page="optimization"><span class="action-icon icon-violet"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19.5V4.5M4 19.5h16m-13-4 4-4 3 2 5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="action-copy"><strong>Подобрать вариант</strong><small>Сравнить стоимость и покрытие требований.</small></span><span class="action-arrow">→</span></button>
+          </div>
+        </section>
+
+        <section class="page-section is-visible" id="page-builder" data-page-section="builder">
+          <div class="page-heading heading-with-action">
+            <div><p class="eyebrow">ШАГ 1 · НАСТРОЙКА</p><h1>Сценарий и состав</h1><p class="page-subtitle">Выберите требования и сформируйте пул средств защиты и организационных мер для расчёта.</p></div>
+            <div class="heading-meta"><span class="soft-badge"><span class="status-dot status-dot-blue"></span><span id="builder-item-count">0 позиций-кандидатов</span></span></div>
+          </div>
+
+          <div class="workflow-strip" aria-label="Этапы принятия решения">
+            <div class="workflow-step is-current"><span class="workflow-number">1</span><span><strong>Сценарий</strong><small>Профиль и требования</small></span></div>
+            <span class="workflow-connector"></span>
+            <div class="workflow-step"><span class="workflow-number">2</span><span><strong>Состав</strong><small>Средства и оргмеры</small></span></div>
+            <span class="workflow-connector"></span>
+            <div class="workflow-step"><span class="workflow-number">3</span><span><strong>Расчёт</strong><small>Оценка или оптимизация</small></span></div>
+          </div>
+
+          <div class="builder-layout">
+            <aside class="panel scenario-panel">
+              <div class="panel-heading"><div><h2>Параметры сценария</h2><p>От чего зависит оценка</p></div><span class="heading-symbol"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5h16M4 12h16M4 18.5h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span></div>
+              <label class="control-label" for="profile-select">Профиль обязательности</label>
+              <select id="profile-select" class="select-control"></select>
+              <p class="control-help" id="profile-description">Профиль определяет обязательные требования в этом сценарии. Они остаются включёнными.</p>
+              <div class="field-grid"><div><label class="control-label" for="period-input">Период расчёта</label><div class="input-suffix"><input id="period-input" class="text-control" type="number" min="0.1" max="120" step="0.1" value="12"><span>мес.</span></div></div><div><label class="control-label" for="currency-label">Валюта</label><div class="static-control" id="currency-label">RUB · ₽</div></div></div>
+              <p class="inline-note">Стоимость за период = внедрение + ежемесячные расходы × период. Период можно указать с одним знаком после запятой.</p>
+              <div class="panel-divider"></div>
+              <div class="requirements-heading"><div><h3>Требования</h3><p><span id="requirements-selected-count">0</span> из <span id="requirements-total-count">0</span> выбрано</p></div><button class="text-button" id="toggle-requirements" type="button">Выбрать все</button></div><p class="requirements-note">Обязательные требования отмечены и зафиксированы профилем. Необязательные можно включать и исключать из расчёта.</p>
+              <div id="requirements-list" class="requirements-list"></div>
+              <div class="scenario-footer"><div><span>Обязательные в расчёте</span><strong id="mandatory-in-scenario">0</strong></div><div><span>Исключено из расчёта</span><strong id="excluded-in-scenario">0</strong></div></div>
+            </aside>
+
+            <section class="panel catalog-panel">
+              <div class="panel-heading catalog-head"><div><h2>Средства и организационные меры</h2><p>Добавьте позиции, которые оптимизатор может включить в итоговый набор.</p></div><span class="catalog-total" id="catalog-total">0 позиций</span></div>
+              <div class="cost-explainer"><span class="cost-explainer-mark">₽</span><p><strong>Стоимость вводится для текущего сценария.</strong> Укажите стоимость внедрения и эксплуатации из актуальных расчётов. Цены не хранятся в каталоге; для бесплатной позиции укажите 0.</p></div>
+              <div class="catalog-toolbar"><label class="search-box"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.5" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input id="catalog-search" type="search" placeholder="Найти средство или меру…" aria-label="Поиск по каталогу"></label><div class="catalog-tabs" role="group" aria-label="Тип позиции"><button type="button" class="catalog-tab is-active" data-kind="all">Все</button><button type="button" class="catalog-tab" data-kind="tool">Средства защиты</button><button type="button" class="catalog-tab" data-kind="org">Оргмеры</button></div></div>
+              <div id="catalog-list" class="catalog-list"></div>
+              <div class="catalog-footer"><span id="catalog-visible-count">Показаны все позиции</span><button type="button" class="button button-quiet button-small" id="clear-selection">Очистить выбранные</button></div>
+            </section>
+          </div>
+          <div class="builder-actions"><div class="builder-cost"><span>Оценка стоимости · <strong id="builder-period-label">12 мес.</strong></span><strong id="builder-total-cost">0 ₽</strong></div><div class="button-row"><button type="button" class="button button-secondary" data-page="evaluation">Оценить набор</button><button type="button" class="button button-primary" data-page="optimization">К оптимизации <span aria-hidden="true">→</span></button></div></div>
+        </section>
+
+        <section class="page-section" id="page-evaluation" data-page-section="evaluation" hidden>
+          <div class="page-heading heading-with-action"><div><p class="eyebrow">ШАГ 2 · ПРОВЕРКА</p><h1>Оценка набора</h1><p class="page-subtitle">Проверьте, какие выбранные требования закрываются текущим пулом кандидатов и сколько это стоит.</p></div><button class="button button-primary" type="button" id="run-evaluation"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Рассчитать</button></div>
+          <div class="evaluation-banner" id="evaluation-banner"><span class="banner-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="m8 12 2.5 2.5L16 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><strong id="evaluation-banner-title">Оценка ещё не выполнена</strong><p id="evaluation-banner-text">Нажмите «Рассчитать», чтобы проверить обязательные требования и стоимость.</p></div><span class="banner-status" id="evaluation-banner-status">Нет расчёта</span></div>
+          <div class="stat-grid evaluation-stats"><article class="stat-card"><span class="stat-label">Стоимость за период</span><strong class="stat-value" id="evaluation-cost">—</strong><span class="stat-foot" id="evaluation-cost-period">За 12 мес.</span></article><article class="stat-card"><span class="stat-label">Закрыто требований</span><strong class="stat-value" id="evaluation-covered">—</strong><span class="stat-foot">Из выбранных</span></article><article class="stat-card"><span class="stat-label">Обязательные закрыты</span><strong class="stat-value" id="evaluation-mandatory">—</strong><span class="stat-foot" id="evaluation-mandatory-foot">Ожидают проверки</span></article><article class="stat-card"><span class="stat-label">Кандидаты в наборе</span><strong class="stat-value" id="evaluation-items">—</strong><span class="stat-foot">Средства и оргмеры</span></article></div>
+          <article class="panel requirements-result-panel"><div class="panel-heading"><div><h2>Результат по каждому требованию</h2><p>Какие позиции его закрывают или чего не хватает</p></div><div class="result-legend"><span><i class="legend-dot dot-green"></i>Закрыто</span><span><i class="legend-dot dot-amber"></i>Не закрыто</span></div></div><div id="evaluation-requirements" class="result-requirements"></div><div id="evaluation-empty" class="empty-state"><div class="empty-illustration"><svg viewBox="0 0 24 24" fill="none"><path d="M5 3.5h10l4 4v13H5zM8 12h8M8 15.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><strong>Нет результата расчёта</strong><p>Сначала задайте сценарий и нажмите «Рассчитать».</p></div></article>
+          <div class="bottom-next"><div><strong>Нужно подобрать состав в рамках бюджета?</strong><p>На следующем шаге можно сравнить варианты по стоимости и покрытию.</p></div><button type="button" class="button button-primary" data-page="optimization">К оптимизации <span aria-hidden="true">→</span></button></div>
+        </section>
+
+        <section class="page-section" id="page-optimization" data-page-section="optimization" hidden>
+          <div class="page-heading"><p class="eyebrow">ШАГ 3 · ВЫБОР ВАРИАНТА</p><h1>Оптимизация</h1><p class="page-subtitle">Алгоритм подбирает комбинацию из отмеченных кандидатов, учитывая обязательные требования и стоимость за выбранный период.</p></div>
+          <div class="optimization-layout">
+            <section class="panel optimizer-settings"><div class="panel-heading"><div><h2>Параметры оптимизации</h2><p>Выберите алгоритм и цель</p></div><span class="heading-symbol"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19.5V4.5M4 19.5h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m7 15 4-4 3 2 5-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+              <label class="control-label" for="algorithm-select">Алгоритм</label><select class="select-control" id="algorithm-select"></select><p class="control-help" id="algorithm-description">Список зависит от реализованных алгоритмов.</p>
+              <label class="control-label label-spaced">Постановка задачи</label><div class="mode-options"><label class="mode-option is-selected" data-mode-card="min_cost"><input type="radio" name="opt-mode" value="min_cost" checked><span class="mode-radio"></span><span><strong>Минимальная стоимость</strong><small>Закрыть все обязательные требования с минимальными затратами.</small></span></label><label class="mode-option" data-mode-card="max_coverage"><input type="radio" name="opt-mode" value="max_coverage"><span class="mode-radio"></span><span><strong>Максимальное покрытие</strong><small>Закрыть как можно больше выбранных требований в пределах бюджета. Обязательные должны быть закрыты.</small></span></label></div>
+              <div class="budget-field" id="budget-field" hidden><label class="control-label" for="budget-input">Бюджет на период, ₽</label><input class="text-control" type="number" id="budget-input" min="0" step="1000" value="500000"><p class="control-help">Бюджет относится ко всему выбранному периоду.</p></div>
+              <button type="button" class="button button-primary full-button" id="run-optimization"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.7"/></svg>Запустить подбор</button><p class="optimizer-note">Учитываются только позиции, добавленные в состав кандидатов. Чтобы расширить выбор, вернитесь в «Сценарий и состав».</p>
+            </section>
+            <section class="panel solution-panel"><div class="panel-heading"><div><h2>Найденный вариант</h2><p>Результат выбранного алгоритма</p></div><span class="result-chip" id="solution-chip">Нет расчёта</span></div><div id="solution-empty" class="empty-state"><div class="empty-illustration"><svg viewBox="0 0 24 24" fill="none"><path d="M4 19.5V4.5M4 19.5h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m7 15 4-4 3 2 5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><strong>Результат появится после подбора</strong><p>Выберите алгоритм и постановку задачи, затем запустите расчёт.</p></div><div id="solution-result" hidden><div class="solution-metrics"><div><span>Стоимость</span><strong id="solution-cost">—</strong></div><div><span>Закрыто требований</span><strong id="solution-covered">—</strong></div><div><span>Позиций в варианте</span><strong id="solution-items-count">—</strong></div></div><div class="panel-divider"></div><h3 class="subsection-title">Состав найденного варианта</h3><div id="solution-items" class="solution-items"></div><div class="solution-foot" id="solution-foot"></div></div></section>
+          </div>
+          <article class="panel pareto-panel"><div class="panel-heading"><div><h2>Сравнение вариантов</h2><p>Компромисс между расходами и количеством закрытых требований</p></div><span class="chart-badge">Фронт Парето</span></div><div id="pareto-chart" class="pareto-chart"><div class="chart-placeholder"><span class="chart-placeholder-icon">↗</span><strong>График появится после расчёта</strong><span>По горизонтали — стоимость за период, по вертикали — число закрытых требований.</span></div></div><div class="chart-footer"><span><i class="legend-dot dot-blue"></i>Другие варианты</span><span><i class="legend-dot dot-green"></i>Найденное решение</span></div></article>
+        </section>
+
+        <footer class="app-footer"><span>СППР · Модуль принятия решений</span><span id="footer-data-state">Справочники загружаются</span></footer>
+      </div>
+    </main>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+</body>
+</html>
