@@ -29,6 +29,17 @@ def test_logout_clears_session(client):
     assert client.get("/api/admin/gaps").status_code == 401
 
 
-def test_admin_page_is_served(client):
-    assert client.get("/admin").status_code == 200
-    assert client.get("/").status_code == 200
+def test_admin_page_requires_admin(client):
+    res = client.get("/admin", follow_redirects=False)
+    assert res.status_code == 303
+    assert res.headers["location"].endswith("/")
+
+    client.post("/api/auth/login", json={"login": "user", "password": "user"})
+    res = client.get("/admin", follow_redirects=False)
+    assert res.status_code == 303
+    assert res.headers["location"].endswith("/denied")
+
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    res = client.get("/admin", follow_redirects=False)
+    assert res.status_code == 200

@@ -188,15 +188,20 @@ def create_app(
     #  Фронтенд: статические файлы из frontend/, если они есть
     # ------------------------------------------------------------------ #
     front = paths.frontend_dir()
-    if (front / "index.html").is_file():
+    if front.is_dir():
         app.mount("/static", StaticFiles(directory=front), name="static")
 
-        @app.get("/", include_in_schema=False)
-        def index() -> FileResponse:
-            return FileResponse(front / "index.html")
+        if (front / "index.html").is_file():
+            @app.get("/", include_in_schema=False)
+            def index() -> FileResponse:
+                return FileResponse(front / "index.html")
 
         @app.get("/admin", include_in_schema=False)
-        def admin_page() -> FileResponse:
+        def admin_page(user: User | None = Depends(current_user)):
+            if user is None:
+                return RedirectResponse("/", status_code=303)
+            if user.role != "admin":
+                return RedirectResponse("/denied", status_code=303)
             return FileResponse(front / "admin.html")
 
         @app.get("/denied", include_in_schema=False)
