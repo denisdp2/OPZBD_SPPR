@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Администратор — СППР</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="side">
+      <div>
+        <div class="brand-name">СППР</div>
+      </div>
+      <div class="who" id="who"></div>
+      <nav>
+        <button type="button" data-page="dashboard" class="active">Обзор</button>
+        <button type="button" data-page="requirements">Требования</button>
+        <button type="button" data-page="tools">Средства</button>
+        <button type="button" data-page="org">Меры</button>
+        <button type="button" data-page="registry">Реестр</button>
+        <button type="button" data-page="gaps">Незакрытые требования</button>
+        <button type="button" data-page="export">Экспорт базы</button>
+      </nav>
+      <button class="btn" type="button" id="logout">Выйти</button>
+    </aside>
+    <main class="main">
+      <section id="page-dashboard">
+        <div class="top">
+          <div>
+            <p class="eyebrow">Справочники</p>
+            <h1>Панель администратора</h1>
+            <p class="lead">Редактирование требований, средств защиты и организационных мер.</p>
+          </div>
+        </div>
+        <div class="grid">
+          <div class="stat">Требования<b id="stat-req">—</b></div>
+          <div class="stat">Средства<b id="stat-tools">—</b></div>
+          <div class="stat">Меры<b id="stat-org">—</b></div>
+          <div class="stat">Незакрытые<b id="stat-gaps">—</b></div>
+        </div>
+       
+      </section>
+
+      <section id="page-requirements" class="hidden">
+        <div class="top">
+          <div>
+            <p class="eyebrow">Справочник</p>
+            <h1>Требования</h1>
+          </div>
+        </div>
+        <div class="card toolbar upload-bar">
+          <label class="btn secondary file-btn">Загрузить файл
+            <input type="file" data-upload="requirements">
+          </label>
+          <span class="upload-status" data-upload-status="requirements">Файл не выбран</span>
+        </div>
+        <div id="req-form" class="card hidden"></div>
+        <div id="req-table"></div>
+      </section>
+
+      <section id="page-tools" class="hidden">
+        <div class="top">
+          <div>
+            <p class="eyebrow">Справочник</p>
+            <h1>Средства защиты</h1>
+          </div>
+        </div>
+        <div class="card toolbar upload-bar">
+          <label class="btn secondary file-btn">Загрузить файл
+            <input type="file" data-upload="tools">
+          </label>
+          <span class="upload-status" data-upload-status="tools">Файл не выбран</span>
+        </div>
+        <div id="tool-form" class="card hidden"></div>
+        <div id="tool-table"></div>
+      </section>
+
+      <section id="page-org" class="hidden">
+        <div class="top">
+          <div>
+            <p class="eyebrow">Справочник</p>
+            <h1>Организационные меры</h1>
+          </div>
+        </div>
+        <div class="card toolbar upload-bar">
+          <label class="btn secondary file-btn">Загрузить файл
+            <input type="file" data-upload="org">
+          </label>
+          <span class="upload-status" data-upload-status="org">Файл не выбран</span>
+        </div>
+        <div id="org-form" class="card hidden"></div>
+        <div id="org-table"></div>
+      </section>
+
+      <section id="page-registry" class="hidden">
+        <div class="top">
+          <div>
+            <p class="eyebrow">Справочник</p>
+            <h1>Реестр</h1>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-gaps" class="hidden">
+        <div class="top">
+          <div>
+            <p class="eyebrow">Контроль полноты</p>
+            <h1>Требования без покрытия</h1>
+            <p class="lead">Список требований, которые не закрывает ни одно средство и ни одна мера.</p>
+          </div>
+        </div>
+        <div id="gaps-table"></div>
+      </section>
+
+      <section id="page-export" class="hidden">
+        <div class="top">
+          <div>
+            <p class="eyebrow">База целиком</p>
+            <h1>Экспорт справочников</h1>
+            <p class="lead">Выгрузка требований, элементов защиты и профилей в JSON.</p>
+          </div>
+        </div>
+        <div class="card toolbar">
+          <button class="btn" type="button" id="export-btn">....</button>
+        </div>
+        <pre id="export-preview" class="card hidden"></pre>
+      </section>
+    </main>
+  </div>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/admin.js"></script>
+</body>
+</html>
