@@ -222,3 +222,12 @@ th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transfor
   .form-grid { grid-template-columns: 1fr; }
   .side { min-height: auto; }
 }
+
+.sort-column { border: 0; background: transparent; color: inherit; font: inherit;
+  text-transform: inherit; text-align: left; cursor: pointer; padding: 4px 0; }
+.sort-column:focus-visible { outline: 2px solid var(--accent, #15344c); outline-offset: 3px; }
+#registry-table { overflow-x: auto; }
+#registry-table td { overflow-wrap: anywhere; }
+#registry-table td:nth-child(5) { white-space: nowrap; }
+#registry-table[aria-busy="true"] { opacity: .65; }
+button:disabled { cursor: wait; opacity: .55; }

@@ -52,7 +52,7 @@ function readField(form, name) {
 
 function errorMessage(error) {
   if (error instanceof ApiError && error.status === 404) {
-    return `${error.message} Пока можно оставить authMode: "mock" в assets/js/config.js.`;
+    return "Это действие пока недоступно. Используйте выданную учётную запись.";
   }
   return error?.message || "Не удалось выполнить запрос. Попробуйте ещё раз.";
 }
@@ -101,7 +101,7 @@ document.querySelector("#login-form").addEventListener("submit", (event) => {
     password: String(new FormData(form).get("password") ?? ""),
   }), (result) => {
     showMessage("login", result?.message || "Вход выполнен.", "success");
-    window.setTimeout(() => window.location.assign("/static/workspace.html"), 850);
+    window.location.assign(result?.role === "admin" ? "/admin" : "/static/workspace.html");
   });
 });
 
