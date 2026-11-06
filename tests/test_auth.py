@@ -11,7 +11,7 @@ def test_admin_can_reach_admin_api(client):
     client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
     me = client.get("/api/auth/me").json()
     assert me["role"] == "admin"
-    assert client.get("/api/admin/gaps").status_code == 501
+    assert client.get("/api/admin/gaps").status_code == 200
 
 
 def test_user_cannot_reach_admin_api(client):

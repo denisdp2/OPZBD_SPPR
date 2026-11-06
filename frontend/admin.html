@@ -50,11 +50,12 @@
           </div>
         </div>
         <div class="card toolbar upload-bar">
-          <label class="btn secondary file-btn">Загрузить файл
-            <input type="file" data-upload="requirements">
+          <label class="btn secondary file-btn">Импортировать JSON
+            <input type="file" accept=".json" data-upload="requirements">
           </label>
           <span class="upload-status" data-upload-status="requirements">Файл не выбран</span>
         </div>
+        <button class="btn" type="button" id="add-requirements">Добавить запись</button>
         <div id="req-form" class="card hidden"></div>
         <div id="req-table"></div>
       </section>
@@ -67,11 +68,12 @@
           </div>
         </div>
         <div class="card toolbar upload-bar">
-          <label class="btn secondary file-btn">Загрузить файл
-            <input type="file" data-upload="tools">
+          <label class="btn secondary file-btn">Импортировать JSON
+            <input type="file" accept=".json" data-upload="tools">
           </label>
           <span class="upload-status" data-upload-status="tools">Файл не выбран</span>
         </div>
+        <button class="btn" type="button" id="add-tools">Добавить запись</button>
         <div id="tool-form" class="card hidden"></div>
         <div id="tool-table"></div>
       </section>
@@ -84,21 +86,58 @@
           </div>
         </div>
         <div class="card toolbar upload-bar">
-          <label class="btn secondary file-btn">Загрузить файл
-            <input type="file" data-upload="org">
+          <label class="btn secondary file-btn">Импортировать JSON
+            <input type="file" accept=".json" data-upload="org">
           </label>
           <span class="upload-status" data-upload-status="org">Файл не выбран</span>
         </div>
+        <button class="btn" type="button" id="add-org">Добавить запись</button>
         <div id="org-form" class="card hidden"></div>
         <div id="org-table"></div>
       </section>
 
       <section id="page-registry" class="hidden">
-        <div class="top">
-          <div>
-            <p class="eyebrow">Справочник</p>
-            <h1>Реестр</h1>
+        <div class="top"><div><p class="eyebrow">Источник средств</p>
+          <h1>Реестр российского ПО</h1>
+          <p class="lead">Загрузите выгрузку Excel, XML или базу SQLite из прежних скриптов. Связи с требованиями задаются в разделе «Средства».</p>
+        </div></div>
+        <div class="card">
+          <div class="toolbar upload-bar">
+            <label class="btn secondary file-btn">Импортировать XLSX / XML / SQLite
+              <input type="file" accept=".xlsx,.xml,.db,.sqlite,.sqlite3" data-upload="registry">
+            </label>
+            <span class="upload-status" data-upload-status="registry">Файл не выбран</span>
           </div>
+          <div class="toolbar">
+            <button class="btn secondary" id="download-registry" data-official-format="xml" type="button">Скачать XML с сайта реестра</button>
+            <button class="btn secondary" data-official-format="html" type="button">Скачать HTML с сайта</button>
+            <button class="btn secondary" data-official-format="xls" type="button">Скачать XLS с сайта</button>
+            <a class="btn secondary" id="registry-excel" href="/api/admin/registry/export.xlsx">Экспорт в Excel</a>
+          </div>
+          <p id="registry-download-status" role="status" aria-live="polite"></p>
+          <p>Повторный импорт обновляет сведения реестра, сохраняя ручные настройки средств.</p>
+          <div class="toolbar">
+            <button class="btn" id="collect-prices" type="button">Получить стоимость</button>
+            <button class="btn secondary" id="retry-prices" type="button">Повторить без результата</button>
+            <button class="btn secondary" id="refresh-prices" type="button">Пересчитать стоимость</button>
+            <span id="price-progress" role="status" aria-live="polite"></span>
+          </div>
+          <p>Обрабатывается до 100 уникальных ссылок за запуск. Цена из блока товара или прайса — ориентир:
+          проверьте лицензию, период и единицу поставки. OCR и выполнение JavaScript не поддерживаются.</p>
+        </div>
+        <div class="toolbar" role="group" aria-label="Статус записей реестра">
+          <button class="btn" type="button" data-registry-state="active" aria-pressed="true">Актуальное ПО</button>
+          <button class="btn secondary" type="button" data-registry-state="excluded" aria-pressed="false">Исключённое ПО</button>
+        </div>
+        <form id="registry-search" class="card toolbar">
+          <label for="registry-query">Поиск по номеру, названию, правообладателю</label>
+          <input id="registry-query" type="search"><button class="btn" type="submit">Найти</button>
+        </form>
+        <div id="registry-table"></div>
+        <div class="toolbar">
+          <button class="btn secondary" id="registry-prev" type="button">Назад</button>
+          <span id="registry-count" role="status"></span>
+          <button class="btn secondary" id="registry-next" type="button">Далее</button>
         </div>
       </section>
 
@@ -122,7 +161,7 @@
           </div>
         </div>
         <div class="card toolbar">
-          <button class="btn" type="button" id="export-btn">....</button>
+          <button class="btn" type="button" id="export-btn">Скачать JSON</button>
         </div>
         <pre id="export-preview" class="card hidden"></pre>
       </section>
