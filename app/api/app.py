@@ -320,6 +320,7 @@ def create_app(
         refresh: bool = False,
         limit: int = Query(100, ge=1, le=1000),
     ) -> dict:
+        """При refresh=true limit задаёт размер порции полного пересчёта, иначе лимит задачи."""
         try:
             result = registry.start(retry, limit, refresh)
         except ValueError as exc:
@@ -346,6 +347,7 @@ def create_app(
         app.mount("/static", StaticFiles(directory=front), name="static")
 
         if (front / "index.html").is_file():
+
             @app.get("/", include_in_schema=False)
             def index() -> FileResponse:
                 return FileResponse(front / "index.html")
