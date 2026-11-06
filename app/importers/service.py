@@ -2,6 +2,7 @@
 
 import asyncio
 from collections import defaultdict
+from itertools import islice
 from pathlib import Path
 from threading import Lock
 from urllib.parse import urlsplit
@@ -87,11 +88,12 @@ class RegistryService:
                 if url in reusable:
                     cached[url].append(record["reg_number"])
                     continue
-                if url in groups or len(groups) < limit:
+                if refresh or url in groups or len(groups) < limit:
                     groups[url].append(record["reg_number"])
             for url, numbers in cached.items():
                 self.store.save_price(numbers, PriceResult.model_validate(reusable[url]), url)
             self.pending = dict(groups)
+            self.batch_size = limit
             self.job = {"status": "running", "total": len(groups), "done": 0, "errors": 0}
             return dict(self.job)
 
@@ -100,9 +102,8 @@ class RegistryService:
             return dict(self.job)
 
     async def run(self) -> None:
+        pending = iter(self.pending.items())
         queue = asyncio.Queue()
-        for pair in self.pending.items():
-            queue.put_nowait(pair)
         hosts = defaultdict(lambda: asyncio.Semaphore(2))
 
         async def worker(client):
@@ -130,13 +131,18 @@ class RegistryService:
                     "Accept-Language": "ru,en;q=0.8",
                 },
             ) as client:
-                workers = [asyncio.create_task(worker(client)) for _ in range(8)]
-                try:
-                    await asyncio.gather(*workers)
-                finally:
-                    for task in workers:
-                        task.cancel()
-                    await asyncio.gather(*workers, return_exceptions=True)
+                while batch := list(islice(pending, self.batch_size)):
+                    for pair in batch:
+                        queue.put_nowait(pair)
+                    workers = [
+                        asyncio.create_task(worker(client)) for _ in range(min(8, len(batch)))
+                    ]
+                    try:
+                        await asyncio.gather(*workers)
+                    finally:
+                        for task in workers:
+                            task.cancel()
+                        await asyncio.gather(*workers, return_exceptions=True)
             with self.lock:
                 self.job["status"] = "completed"
         except Exception as exc:
