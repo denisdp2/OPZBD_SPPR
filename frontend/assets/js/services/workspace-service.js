@@ -42,11 +42,11 @@ export const workspaceService = Object.freeze({
     const usingExamples = fallbacks.length > 0;
     // Prefer one internally consistent sample dataset over mixing real and sample IDs.
     return {
-      requirements: usingExamples ? demoRequirements : requirements.value,
-      items: usingExamples ? demoItems : items.value,
-      profiles: usingExamples ? demoProfiles : profiles.value,
-      optimizers: usingExamples ? demoOptimizers : optimizers.value,
-      usingExamples,
+      requirements: requirements.value,
+      items: items.value,
+      profiles: profiles.value,
+      optimizers: optimizers.value, // у optimizers уже подставлен demoOptimizers при ошибке
+      usingExamples: [requirements, items, profiles].some((e) => e.example),
       serverOnline,
       problems: fallbacks.map((entry) => entry.problem),
     };
