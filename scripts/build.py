@@ -66,6 +66,7 @@ def assemble(app_dir: Path) -> Path:
 
     shutil.copytree(app_dir, out / "szi")
     (out / "data").mkdir()
+    shutil.copy(ROOT / "data" / "seed_bundle.json", out / "data" / "seed_bundle.json")
     shutil.copy(LAUNCHERS / "ПРОЧТИ.txt", out / "ПРОЧТИ.txt")
 
     if tag == "windows":
