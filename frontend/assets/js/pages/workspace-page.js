@@ -15,6 +15,7 @@ const state = {
   periodMonths: 12,
   activeKind: "all",
   search: "",
+  catalogLimit: 60,
   usingExamples: true,
   serverOnline: false,
   problems: [],
@@ -301,7 +302,7 @@ function miniIcon(kind) {
   return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 9h8M8 12h5M8 15h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
 }
 
-const CATALOG_LIMIT = 60; // рисуем только первые 60 позиций
+const CATALOG_PAGE_SIZE = 60;
 
 function renderCatalog() {
   const list = $("#catalog-list");
@@ -312,7 +313,7 @@ function renderCatalog() {
     const searchable = `${item.name} ${item.description ?? ""} ${item.id} ${item.vendor ?? ""} ${item.fstec_cert_no ?? ""} ${item.in_ru_software_registry ? "российское по реестр" : ""}`.toLocaleLowerCase("ru");
     return kindMatches && (!search || searchable.includes(search));
   });
-  const visible = filtered.slice(0, CATALOG_LIMIT);
+  const visible = filtered.slice(0, state.catalogLimit);
   list.innerHTML = visible.map((item) => {
     const selected = state.candidates.has(item.id);
     const costs = selected ? state.candidates.get(item.id) : priceFor(item);
@@ -343,9 +344,10 @@ function renderCatalog() {
       <button type="button" class="catalog-item-select" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? '<svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'}</button>
     </article>`;
   }).join("") || `<div class="empty-state"><div class="empty-illustration">⌕</div><strong>Ничего не найдено</strong><p>Измените запрос или выберите другую категорию.</p></div>`;
+  $("#catalog-show-more").hidden = visible.length >= filtered.length;
   $("#catalog-total").textContent = `${state.items.length} позиций`;
   $("#catalog-visible-count").textContent = filtered.length > visible.length
-    ? `Показано ${visible.length} из ${filtered.length} найденных. Уточните поиск, чтобы увидеть остальные`
+    ? `Показано ${visible.length} из ${filtered.length} найденных. Нажмите «Показать ещё», чтобы увидеть остальные`
     : `Показано ${filtered.length} из ${state.items.length}`;
 }
 
@@ -749,14 +751,20 @@ function bindEvents() {
     if (button) selectItem(button.dataset.toggleItem);
   });
   $("#catalog-list").addEventListener("change", onCostChange);
+  $("#catalog-show-more").addEventListener("click", () => {
+    state.catalogLimit += CATALOG_PAGE_SIZE;
+    renderCatalog();
+  });
   let searchTimer;
   $("#catalog-search").addEventListener("input", (event) => {
     state.search = event.target.value;
+    state.catalogLimit = CATALOG_PAGE_SIZE;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(renderCatalog, 250);
   });
   $$(".catalog-tab").forEach((tab) => tab.addEventListener("click", () => {
     state.activeKind = tab.dataset.kind;
+    state.catalogLimit = CATALOG_PAGE_SIZE;
     $$(".catalog-tab").forEach((other) => other.classList.toggle("is-active", other === tab));
     renderCatalog();
   }));

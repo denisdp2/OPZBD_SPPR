@@ -22,6 +22,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Проверки справочников интерфейса
+        run: node --test tests/frontend/workspace-service.test.mjs
       - name: Установка зависимостей
         run: pip install -e ".[dev]"
       - name: Линтер
