@@ -301,6 +301,8 @@ function miniIcon(kind) {
   return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 9h8M8 12h5M8 15h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
 }
 
+const CATALOG_LIMIT = 60; // рисуем только первые 60 позиций
+
 function renderCatalog() {
   const list = $("#catalog-list");
   if (!list) return;
@@ -310,7 +312,8 @@ function renderCatalog() {
     const searchable = `${item.name} ${item.description ?? ""} ${item.id} ${item.vendor ?? ""} ${item.fstec_cert_no ?? ""} ${item.in_ru_software_registry ? "российское по реестр" : ""}`.toLocaleLowerCase("ru");
     return kindMatches && (!search || searchable.includes(search));
   });
-  list.innerHTML = filtered.map((item) => {
+  const visible = filtered.slice(0, CATALOG_LIMIT);
+  list.innerHTML = visible.map((item) => {
     const selected = state.candidates.has(item.id);
     const costs = selected ? state.candidates.get(item.id) : priceFor(item);
     const covers = (item.covers ?? []).map((id) => {
@@ -341,7 +344,9 @@ function renderCatalog() {
     </article>`;
   }).join("") || `<div class="empty-state"><div class="empty-illustration">⌕</div><strong>Ничего не найдено</strong><p>Измените запрос или выберите другую категорию.</p></div>`;
   $("#catalog-total").textContent = `${state.items.length} позиций`;
-  $("#catalog-visible-count").textContent = `Показано ${filtered.length} из ${state.items.length}`;
+  $("#catalog-visible-count").textContent = filtered.length > visible.length
+    ? `Показано ${visible.length} из ${filtered.length} найденных. Уточните поиск, чтобы увидеть остальные`
+    : `Показано ${filtered.length} из ${state.items.length}`;
 }
 
 function renderOverview() {
@@ -712,7 +717,12 @@ function onCostChange(event) {
 function bindEvents() {
   $$('[data-page]').forEach((control) => control.addEventListener("click", () => navigateTo(control.dataset.page)));
   $("#profile-select").addEventListener("change", (event) => {
+    const oldMandatory = mandatoryIds();
     state.profileId = event.target.value;
+    const newMandatory = new Set(mandatoryIds());
+    oldMandatory.forEach((id) => {
+      if (!newMandatory.has(id)) state.selectedRequirements.delete(id);
+    });
     mandatoryRequirementsAreIncluded();
     invalidateResults();
     renderAll();
@@ -739,9 +749,11 @@ function bindEvents() {
     if (button) selectItem(button.dataset.toggleItem);
   });
   $("#catalog-list").addEventListener("change", onCostChange);
+  let searchTimer;
   $("#catalog-search").addEventListener("input", (event) => {
     state.search = event.target.value;
-    renderCatalog();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderCatalog, 250);
   });
   $$(".catalog-tab").forEach((tab) => tab.addEventListener("click", () => {
     state.activeKind = tab.dataset.kind;
