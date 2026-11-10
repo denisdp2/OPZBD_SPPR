@@ -16,7 +16,12 @@ const state = {
   activeKind: "all",
   search: "",
   catalogLimit: 60,
+  requirementSearch: "",
+  requirementGroup: "all",
+  requirementFilter: "all",
   usingExamples: true,
+  usingExampleOptimizers: true,
+  catalogsEmpty: false,
   serverOnline: false,
   problems: [],
   lastEvaluation: null,
@@ -240,25 +245,41 @@ function setLoading(button, loading, idleText) {
 function renderApiState() {
   const apiStatus = $("#api-status");
   const notice = $("#data-notice");
+  const noticeText = $("#data-notice-text");
   const footerState = $("#footer-data-state");
+  const hasCatalogGap = state.catalogsEmpty;
   if (apiStatus) {
     apiStatus.classList.toggle("is-online", state.serverOnline && !state.usingExamples);
-    apiStatus.classList.toggle("is-demo", state.usingExamples);
+    apiStatus.classList.toggle("is-demo", state.usingExamples || hasCatalogGap);
     const label = apiStatus.querySelector("span:last-child");
     if (label) label.textContent = state.usingExamples
-      ? (state.serverOnline ? "Примерные данные" : "Локальный режим просмотра")
-      : "Данные с сервера";
+      ? "Примерные данные"
+      : hasCatalogGap ? "Справочники не заполнены" : "Данные с сервера";
     apiStatus.title = state.problems.join("; ") || (state.serverOnline ? "API доступно" : "Нет соединения с API");
   }
-  if (notice) notice.hidden = !state.usingExamples;
-  if (footerState) footerState.textContent = state.usingExamples ? "Отображаются примерные данные" : "Справочники загружены с сервера";
+  if (notice) {
+    notice.hidden = !state.usingExamples && !hasCatalogGap;
+    if (noticeText) {
+      noticeText.textContent = state.usingExamples
+        ? "Сервер недоступен. Для просмотра показан демонстрационный набор; результаты не являются расчётом по рабочей базе."
+        : "Часть справочников не получена или пока пуста. Проверьте импорт data/seed_bundle.json через административный раздел (/admin → Импорт) и доступность API. После изменений обновите данные кнопкой вверху.";
+    }
+  }
+  if (footerState) {
+    footerState.textContent = state.usingExamples
+      ? "Отображаются демонстрационные данные"
+      : hasCatalogGap
+        ? "Ожидается импорт справочников"
+        : `${state.requirements.length} требований · ${state.items.length} позиций · ${state.profiles.length} профиля · данные с сервера`;
+  }
 }
 
 function renderProfileOptions() {
   const select = $("#profile-select");
   if (!select) return;
-  select.innerHTML = state.profiles.map((entry) => (
-    `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`
+  const profiles = [...state.profiles].sort((a, b) => String(a.id).localeCompare(String(b.id), "ru", { numeric: true }));
+  select.innerHTML = profiles.map((entry) => (
+    `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)} · ${(entry.mandatory ?? []).length} обязательных</option>`
   )).join("");
   select.value = state.profileId;
   const description = $("#profile-description");
@@ -269,21 +290,60 @@ function renderRequirements() {
   const list = $("#requirements-list");
   if (!list) return;
   const mandatory = new Set(profile()?.mandatory ?? []);
-  list.innerHTML = state.requirements.map((req) => {
+  const groupSelect = $("#requirement-group-filter");
+  const groups = [...new Set(state.requirements.map((req) => req.group || "Без группы"))]
+    .sort((a, b) => a.localeCompare(b, "ru"));
+  if (groupSelect) {
+    const selectedGroup = groups.includes(state.requirementGroup) ? state.requirementGroup : "all";
+    state.requirementGroup = selectedGroup;
+    groupSelect.innerHTML = `<option value="all">Все группы (${state.requirements.length})</option>` + groups.map((group) => {
+      const count = state.requirements.filter((req) => (req.group || "Без группы") === group).length;
+      return `<option value="${escapeHtml(group)}">${escapeHtml(group)} · ${count}</option>`;
+    }).join("");
+    groupSelect.value = state.requirementGroup;
+  }
+
+  const query = state.requirementSearch.trim().toLocaleLowerCase("ru");
+  const visible = state.requirements.filter((req) => {
     const isMandatory = mandatory.has(req.id);
-    const checked = isMandatory || state.selectedRequirements.has(req.id);
-    return `<label class="requirement-choice${isMandatory ? " is-mandatory" : ""}">
-      <input type="checkbox" data-requirement-id="${escapeHtml(req.id)}" ${checked ? "checked" : ""} ${isMandatory ? "disabled" : ""}>
-      <span class="requirement-choice-copy">
-        <strong>${escapeHtml(req.title)}${isMandatory ? ' <span class="mandatory-pill">Обязательное</span>' : ""}</strong>
-        <small>${escapeHtml(req.id)}${req.group ? ` · ${escapeHtml(req.group)}` : ""}${req.source ? ` · ${escapeHtml(req.source)}` : ""}</small>
-      </span>
-    </label>`;
-  }).join("") || `<div class="empty-inline">Нет требований для отображения.</div>`;
+    const group = req.group || "Без группы";
+    const scopeMatches = state.requirementFilter === "all" ||
+      (state.requirementFilter === "mandatory" && isMandatory) ||
+      (state.requirementFilter === "optional" && !isMandatory);
+    const groupMatches = state.requirementGroup === "all" || group === state.requirementGroup;
+    const searchable = `${req.id} ${req.group ?? ""} ${req.title} ${req.source ?? ""} ${req.description ?? ""}`.toLocaleLowerCase("ru");
+    return scopeMatches && groupMatches && (!query || searchable.includes(query));
+  });
+
+  const grouped = new Map();
+  visible.forEach((req) => {
+    const key = req.group || "Без группы";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(req);
+  });
+  list.innerHTML = [...grouped.entries()].map(([group, requirements]) => {
+    const mandatoryCount = requirements.filter((req) => mandatory.has(req.id)).length;
+    const rows = requirements.map((req) => {
+      const isMandatory = mandatory.has(req.id);
+      const checked = isMandatory || state.selectedRequirements.has(req.id);
+      return `<label class="requirement-choice${isMandatory ? " is-mandatory" : ""}">
+        <input type="checkbox" data-requirement-id="${escapeHtml(req.id)}" ${checked ? "checked" : ""} ${isMandatory ? "disabled" : ""}>
+        <span class="requirement-choice-copy">
+          <strong>${escapeHtml(req.title)}${isMandatory ? ' <span class="mandatory-pill">Обязательное</span>' : ""}</strong>
+          <small>${escapeHtml(req.id)}${req.source ? ` · ${escapeHtml(req.source)}` : ""}</small>
+        </span>
+      </label>`;
+    }).join("");
+    return `<div class="requirement-group"><div class="requirement-group-heading"><strong>${escapeHtml(group)}</strong><span>${requirements.length} · обязательных: ${mandatoryCount}</span></div>${rows}</div>`;
+  }).join("") || `<div class="empty-inline">${state.requirements.length ? "По заданным условиям ничего не найдено." : "На сервере нет требований. Проверьте импорт data/seed_bundle.json."}</div>`;
+
   $("#requirements-selected-count").textContent = String(state.selectedRequirements.size);
   $("#requirements-total-count").textContent = String(state.requirements.length);
   $("#mandatory-in-scenario").textContent = String(mandatoryIds().length);
   $("#excluded-in-scenario").textContent = String(Math.max(0, state.requirements.length - state.selectedRequirements.size));
+  $$('[data-requirement-filter]').forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.requirementFilter === state.requirementFilter);
+  });
   const toggle = $("#toggle-requirements");
   if (toggle) {
     const optionalCount = state.requirements.filter((req) => !mandatory.has(req.id)).length;
@@ -310,7 +370,11 @@ function renderCatalog() {
   const search = state.search.trim().toLocaleLowerCase("ru");
   const filtered = state.items.filter((item) => {
     const kindMatches = state.activeKind === "all" || item.kind === state.activeKind;
-    const searchable = `${item.name} ${item.description ?? ""} ${item.id} ${item.vendor ?? ""} ${item.fstec_cert_no ?? ""} ${item.in_ru_software_registry ? "российское по реестр" : ""}`.toLocaleLowerCase("ru");
+    const linkedRequirements = (item.covers ?? []).map((id) => {
+      const req = state.requirements.find((entry) => entry.id === id);
+      return `${id} ${req?.title ?? ""} ${req?.group ?? ""}`;
+    }).join(" ");
+    const searchable = `${item.name} ${item.description ?? ""} ${item.id} ${item.vendor ?? ""} ${item.fstec_cert_no ?? ""} ${linkedRequirements} ${item.in_ru_software_registry ? "российское по реестр" : ""}`.toLocaleLowerCase("ru");
     return kindMatches && (!search || searchable.includes(search));
   });
   const visible = filtered.slice(0, state.catalogLimit);
@@ -319,7 +383,8 @@ function renderCatalog() {
     const costs = selected ? state.candidates.get(item.id) : priceFor(item);
     const covers = (item.covers ?? []).map((id) => {
       const req = state.requirements.find((entry) => entry.id === id);
-      return `<span class="cover-chip">${escapeHtml(req?.id ?? id)}</span>`;
+      const title = req ? `${req.id} · ${req.title}` : `${id} · требование отсутствует в справочнике`;
+      return `<span class="cover-chip" title="${escapeHtml(title)}">${escapeHtml(id)}</span>`;
     }).join("");
     const facts = item.kind === "tool" ? `
       <div class="item-facts" aria-label="Сведения о средстве защиты">
@@ -335,7 +400,7 @@ function renderCatalog() {
         <p class="catalog-description">${escapeHtml(item.description || "Описание не указано.")}</p>
         ${facts}
         <div class="covers-label">Связанные требования</div>
-        <div class="covers-row">${covers || '<span class="cover-chip">Связи не заданы</span>'}</div>
+        <div class="covers-row">${covers || '<span class="cover-chip cover-chip-empty">Не сопоставлено · не влияет на покрытие</span>'}</div>
         ${selected ? `<div class="cost-editor">
           <label>Внедрение, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.capex === null || costs.capex === undefined ? "" : escapeHtml(costs.capex)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="capex" aria-label="Стоимость внедрения: ${escapeHtml(item.name)}"><span>₽</span></span></label>
           <label>Эксплуатация в месяц, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.opex_month === null || costs.opex_month === undefined ? "" : escapeHtml(costs.opex_month)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="opex_month" aria-label="Стоимость эксплуатации в месяц: ${escapeHtml(item.name)}"><span>₽</span></span></label>
@@ -343,9 +408,25 @@ function renderCatalog() {
       </div>
       <button type="button" class="catalog-item-select" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? '<svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'}</button>
     </article>`;
-  }).join("") || `<div class="empty-state"><div class="empty-illustration">⌕</div><strong>Ничего не найдено</strong><p>Измените запрос или выберите другую категорию.</p></div>`;
+  }).join("") || `<div class="empty-state"><div class="empty-illustration">⌕</div><strong>${state.items.length ? "Ничего не найдено" : "Каталог пока пуст"}</strong><p>${state.items.length ? "Измените запрос или выберите другую категорию." : "Импортируйте стартовый набор и выгрузку реестра через административный раздел."}</p></div>`;
   $("#catalog-show-more").hidden = visible.length >= filtered.length;
   $("#catalog-total").textContent = `${state.items.length} позиций`;
+  const toolCount = state.items.filter((item) => item.kind === "tool").length;
+  const orgCount = state.items.filter((item) => item.kind === "org").length;
+  const unmappedCount = state.items.filter((item) => !(item.covers ?? []).length).length;
+  const allTab = $('[data-kind="all"]');
+  const toolTab = $('[data-kind="tool"]');
+  const orgTab = $('[data-kind="org"]');
+  if (allTab) allTab.textContent = `Все (${state.items.length})`;
+  if (toolTab) toolTab.textContent = `Средства (${toolCount})`;
+  if (orgTab) orgTab.textContent = `Оргмеры (${orgCount})`;
+  const sourceSummary = $("#catalog-source-summary");
+  if (sourceSummary) {
+    const parts = [`${toolCount} средств защиты`, `${orgCount} организационных мер`];
+    if (toolCount === 0) parts.push("средства появятся после импорта выгрузки реестра в административном разделе");
+    if (unmappedCount > 0) parts.push(`${unmappedCount} позиций без связи с требованиями — их нужно сопоставить в разделе администратора «Средства»`);
+    sourceSummary.textContent = parts.join(" · ");
+  }
   $("#catalog-visible-count").textContent = filtered.length > visible.length
     ? `Показано ${visible.length} из ${filtered.length} найденных. Нажмите «Показать ещё», чтобы увидеть остальные`
     : `Показано ${filtered.length} из ${state.items.length}`;
@@ -428,8 +509,10 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
     </div>`;
   }).join("");
   if (source !== "server") {
-    // Local calculation is deliberately labelled, because API handlers currently may be unavailable.
-    $("#evaluation-banner-text").textContent += " Показатели рассчитаны в интерфейсе на примере данных.";
+    const explanation = state.usingExamples
+      ? " Показатели рассчитаны локально на демонстрационных данных."
+      : " Показатели рассчитаны локально по справочникам с сервера: серверный метод оценки пока недоступен.";
+    $("#evaluation-banner-text").textContent += explanation;
   }
 }
 
@@ -445,7 +528,7 @@ function updateBuilderSummary() {
 function renderOptimizerOptions() {
   const select = $("#algorithm-select");
   select.innerHTML = state.optimizers.map((optimizer) => (
-    `<option value="${escapeHtml(optimizer.name)}">${escapeHtml(optimizer.title)} · ${optimizer.exact ? "точный" : "приближённый"}</option>`
+    `<option value="${escapeHtml(optimizer.name)}">${escapeHtml(optimizer.title)} · ${optimizer.exact ? "точный" : "приближённый"}${state.usingExampleOptimizers ? " · пример" : ""}</option>`
   )).join("");
   if (state.optimizers.length) select.value = state.optimizers[0].name;
   updateAlgorithmDescription();
@@ -481,7 +564,12 @@ function renderSolution(solution, source = "example") {
   const foot = $("#solution-foot");
   foot.classList.toggle("is-good", Boolean(solution.feasible));
   foot.classList.toggle("is-bad", !solution.feasible);
-  foot.textContent = `${source === "server" ? "Результат получен от API." : "Примерный результат рассчитан в интерфейсе."} ${solution.feasible ? "Обязательные требования закрыты." : `Не удалось закрыть все обязательные требования: ${(solution.uncovered_mandatory ?? []).join(", ") || "проверьте состав набора"}.`}`;
+  const sourceLabel = source === "server"
+    ? "Результат получен от API."
+    : state.usingExamples
+      ? "Локальный пример на демонстрационных данных."
+      : "Локальный расчёт по справочникам с сервера; серверный алгоритм пока недоступен.";
+  foot.textContent = `${sourceLabel} ${solution.feasible ? "Обязательные требования закрыты." : `Не удалось закрыть все обязательные требования: ${(solution.uncovered_mandatory ?? []).join(", ") || "проверьте состав набора"}.`}`;
 }
 
 function renderPareto(solutions, selectedSolution = state.lastOptimization) {
@@ -590,11 +678,12 @@ async function runEvaluation() {
     const result = localEvaluate(scenario);
     state.lastEvaluation = result;
     state.resultSource = "example";
-    state.usingExamples = true;
-    if (!state.problems.includes("Оценка: используется локальный расчёт")) state.problems.push("Оценка: используется локальный расчёт");
+    if (!state.problems.includes("Оценка: серверный метод недоступен, выполнен локальный расчёт")) state.problems.push("Оценка: серверный метод недоступен, выполнен локальный расчёт");
     renderApiState();
     renderEvaluation(result, "example");
-    showToast("Показан примерный расчёт. Серверный метод оценки пока недоступен.", "info");
+    showToast(state.usingExamples
+      ? "Показан локальный расчёт на демонстрационных данных."
+      : "API оценки пока недоступен: результат рассчитан локально по данным сервера.", "info");
   } finally {
     state.isCalculating = false;
     setLoading(button, false);
@@ -644,8 +733,7 @@ async function runOptimization() {
     solution = localOptimize(payload);
     solutionSource = "example";
     paretoSource = "example";
-    state.usingExamples = true;
-    if (!state.problems.includes("Оптимизация: используется локальный расчёт")) state.problems.push("Оптимизация: используется локальный расчёт");
+    if (!state.problems.includes("Оптимизация: серверный метод недоступен, выполнен локальный расчёт")) state.problems.push("Оптимизация: серверный метод недоступен, выполнен локальный расчёт");
     renderApiState();
   }
   try {
@@ -656,7 +744,7 @@ async function runOptimization() {
       } catch {
         pareto = localPareto(payload.scenario);
         paretoSource = "example";
-        state.usingExamples = true;
+        if (!state.problems.includes("Фронт Парето: серверный метод недоступен, построен локальный график")) state.problems.push("Фронт Парето: серверный метод недоступен, построен локальный график");
         renderApiState();
       }
     } else {
@@ -669,7 +757,11 @@ async function runOptimization() {
     renderPareto(state.lastPareto, solution);
     state.isCalculating = false;
     setLoading(button, false);
-    showToast(solutionSource === "server" ? "Подбор завершён." : "Показан примерный вариант подбора.", solutionSource === "server" ? "success" : "info");
+    showToast(solutionSource === "server"
+      ? "Подбор завершён на сервере."
+      : state.usingExamples
+        ? "Показан локальный подбор на демонстрационных данных."
+        : "API оптимизации пока недоступен: вариант подобран локально по данным сервера.", solutionSource === "server" ? "success" : "info");
   }
 }
 
@@ -738,6 +830,20 @@ function bindEvents() {
     renderAll();
   });
   $("#requirements-list").addEventListener("change", onRequirementChange);
+  let requirementSearchTimer;
+  $("#requirement-search").addEventListener("input", (event) => {
+    state.requirementSearch = event.target.value;
+    clearTimeout(requirementSearchTimer);
+    requirementSearchTimer = setTimeout(renderRequirements, 180);
+  });
+  $("#requirement-group-filter").addEventListener("change", (event) => {
+    state.requirementGroup = event.target.value;
+    renderRequirements();
+  });
+  $$('[data-requirement-filter]').forEach((button) => button.addEventListener("click", () => {
+    state.requirementFilter = button.dataset.requirementFilter;
+    renderRequirements();
+  }));
   $("#toggle-requirements").addEventListener("click", () => {
     const allSelected = state.requirements.every((req) => state.selectedRequirements.has(req.id));
     if (allSelected) state.selectedRequirements = new Set(mandatoryIds());
@@ -792,9 +898,11 @@ async function loadPageData() {
   const result = await workspaceService.loadCatalogs();
   state.requirements = result.requirements;
   state.items = result.items;
-  state.profiles = result.profiles;
+  state.profiles = [...result.profiles].sort((a, b) => String(a.id).localeCompare(String(b.id), "ru", { numeric: true }));
   state.optimizers = result.optimizers;
   state.usingExamples = result.usingExamples;
+  state.usingExampleOptimizers = result.usingExampleOptimizers;
+  state.catalogsEmpty = result.catalogsEmpty;
   state.serverOnline = result.serverOnline;
   state.problems = result.problems;
 

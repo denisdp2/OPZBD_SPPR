@@ -6,49 +6,64 @@ import {
   demoRequirements,
 } from "../data/workspace-demo-data.js";
 
-function nonEmptyArray(value) {
-  return Array.isArray(value) && value.length > 0;
-}
-
-async function getOrExample(label, getter, fallback) {
+async function readArray(label, getter) {
   try {
     const value = await getter();
-    if (!nonEmptyArray(value)) {
-      return { value: fallback, example: true, problem: `${label}: справочник пуст` };
+    if (!Array.isArray(value)) {
+      throw new Error(`${label}: сервер вернул данные в неожиданном формате`);
     }
-    return { value, example: false, problem: null };
+    return { value, ok: true, problem: null };
   } catch (error) {
     return {
-      value: fallback,
-      example: true,
-      problem: `${label}: ${error?.status === 501 ? "метод пока не реализован" : "данные недоступны"}`,
+      value: [],
+      ok: false,
+      problem: `${label}: ${error?.status === 501 ? "метод пока не реализован" : error?.message || "данные недоступны"}`,
     };
   }
 }
 
 export const workspaceService = Object.freeze({
   async loadCatalogs() {
-    const healthPromise = workspaceApi.health().then(() => true).catch(() => false);
-    const [requirements, items, profiles, optimizers, serverOnline] = await Promise.all([
-      getOrExample("Требования", () => workspaceApi.requirements(), demoRequirements),
-      getOrExample("Каталог", () => workspaceApi.items(), demoItems),
-      getOrExample("Профили", () => workspaceApi.profiles(), demoProfiles),
-      getOrExample("Алгоритмы", () => workspaceApi.optimizers(), demoOptimizers),
-      healthPromise,
+    const [health, requirements, items, profiles, optimizers] = await Promise.all([
+      workspaceApi.health().then(() => true).catch(() => false),
+      readArray("Требования", () => workspaceApi.requirements()),
+      readArray("Средства и меры", () => workspaceApi.items()),
+      readArray("Профили", () => workspaceApi.profiles()),
+      readArray("Алгоритмы", () => workspaceApi.optimizers()),
     ]);
 
-    const entries = [requirements, items, profiles, optimizers];
-    const fallbacks = entries.filter((entry) => entry.example);
-    const usingExamples = [requirements, items, profiles].some((entry) => entry.example);
-    // Prefer one internally consistent sample dataset over mixing real and sample IDs.
+    const catalogEntries = [requirements, items, profiles];
+    const anyCatalogLoaded = catalogEntries.some((entry) => entry.ok);
+    // Демо-набор используется только при полном отсутствии соединения с API.
+    // Пустой ответ работающего сервера не подменяем тестовыми записями.
+    const usingExamples = !health && !anyCatalogLoaded;
+    const pickCatalog = (entry, fallback) => {
+      if (entry.ok) return entry.value;
+      return usingExamples ? fallback : [];
+    };
+
+    const liveRequirements = pickCatalog(requirements, demoRequirements);
+    const liveItems = pickCatalog(items, demoItems);
+    const liveProfiles = pickCatalog(profiles, demoProfiles);
+    const usingExampleOptimizers = !optimizers.ok;
+    const liveOptimizers = optimizers.ok ? optimizers.value : demoOptimizers;
+
+    const problems = [requirements, items, profiles, optimizers]
+      .filter((entry) => entry.problem)
+      .map((entry) => entry.problem);
+
     return {
-      requirements: usingExamples ? demoRequirements : requirements.value,
-      items: usingExamples ? demoItems : items.value,
-      profiles: usingExamples ? demoProfiles : profiles.value,
-      optimizers: optimizers.value, // у optimizers уже подставлен demoOptimizers при ошибке
+      requirements: liveRequirements,
+      items: liveItems,
+      profiles: liveProfiles,
+      optimizers: liveOptimizers,
       usingExamples,
-      serverOnline,
-      problems: fallbacks.map((entry) => entry.problem),
+      usingExampleOptimizers,
+      serverOnline: health || anyCatalogLoaded,
+      catalogsEmpty: !usingExamples && (
+        liveRequirements.length === 0 || liveItems.length === 0 || liveProfiles.length === 0
+      ),
+      problems,
     };
   },
 
