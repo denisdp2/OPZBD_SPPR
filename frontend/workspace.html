@@ -66,7 +66,7 @@
       <div class="content-wrap">
         <div id="data-notice" class="data-notice" hidden role="status">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 10.5v5M12 7.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <span>Для просмотра отображаются примерные справочники. Результаты локального расчёта не являются серверным результатом.</span>
+          <span id="data-notice-text">Для просмотра отображаются примерные справочники. Результаты локального расчёта не являются серверным результатом.</span>
           <button type="button" class="notice-close" id="notice-close" aria-label="Скрыть сообщение">×</button>
         </div>
 
@@ -125,7 +125,10 @@
               <div class="field-grid"><div><label class="control-label" for="period-input">Период расчёта</label><div class="input-suffix"><input id="period-input" class="text-control" type="number" min="0.1" max="120" step="0.1" value="12"><span>мес.</span></div></div><div><label class="control-label" for="currency-label">Валюта</label><div class="static-control" id="currency-label">RUB · ₽</div></div></div>
               <p class="inline-note">Стоимость за период = внедрение + ежемесячные расходы × период. Период можно указать с одним знаком после запятой.</p>
               <div class="panel-divider"></div>
-              <div class="requirements-heading"><div><h3>Требования</h3><p><span id="requirements-selected-count">0</span> из <span id="requirements-total-count">0</span> выбрано</p></div><button class="text-button" id="toggle-requirements" type="button">Выбрать все</button></div><p class="requirements-note">Обязательные требования отмечены и зафиксированы профилем. Необязательные можно включать и исключать из расчёта.</p>
+              <div class="requirements-heading"><div><h3>Требования</h3><p><span id="requirements-selected-count">0</span> из <span id="requirements-total-count">0</span> выбрано</p></div><button class="text-button" id="toggle-requirements" type="button">Выбрать все</button></div><p class="requirements-note">Обязательные требования определяются профилем К1, К2 или К3. Остальные можно включать в расчёт отдельно.</p>
+              <label class="search-box requirements-search"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.5" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input id="requirement-search" type="search" placeholder="Найти по коду или названию…" aria-label="Поиск требований"></label>
+              <select id="requirement-group-filter" class="select-control requirement-group-filter" aria-label="Группа требований"><option value="all">Все группы</option></select>
+              <div class="requirement-scope-tabs" role="group" aria-label="Фильтр обязательности"><button type="button" class="requirement-scope-tab is-active" data-requirement-filter="all">Все</button><button type="button" class="requirement-scope-tab" data-requirement-filter="mandatory">Обязательные</button><button type="button" class="requirement-scope-tab" data-requirement-filter="optional">Дополнительные</button></div>
               <div id="requirements-list" class="requirements-list"></div>
               <div class="scenario-footer"><div><span>Обязательные в расчёте</span><strong id="mandatory-in-scenario">0</strong></div><div><span>Исключено из расчёта</span><strong id="excluded-in-scenario">0</strong></div></div>
             </aside>
@@ -133,6 +136,7 @@
             <section class="panel catalog-panel">
               <div class="panel-heading catalog-head"><div><h2>Средства и организационные меры</h2><p>Добавьте позиции, которые оптимизатор может включить в итоговый набор.</p></div><span class="catalog-total" id="catalog-total">0 позиций</span></div>
               <div class="cost-explainer"><span class="cost-explainer-mark">₽</span><p><strong>Стоимость вводится для текущего сценария.</strong> Укажите стоимость внедрения и эксплуатации из актуальных расчётов. Цены не хранятся в каталоге; для бесплатной позиции укажите 0.</p></div>
+              <p class="catalog-source-summary" id="catalog-source-summary" role="status">Состав каталога загружается…</p>
               <div class="catalog-toolbar"><label class="search-box"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.5" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input id="catalog-search" type="search" placeholder="Найти средство или меру…" aria-label="Поиск по каталогу"></label><div class="catalog-tabs" role="group" aria-label="Тип позиции"><button type="button" class="catalog-tab is-active" data-kind="all">Все</button><button type="button" class="catalog-tab" data-kind="tool">Средства защиты</button><button type="button" class="catalog-tab" data-kind="org">Оргмеры</button></div></div>
               <div id="catalog-list" class="catalog-list"></div>
               <button type="button" class="button button-quiet" id="catalog-show-more" hidden>Показать ещё</button>
