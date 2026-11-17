@@ -387,20 +387,54 @@ async function loadRegistry() {
     const headers = columns.map(([key, title]) => `<button type="button" class="sort-column" data-sort="${key}"
       aria-label="Сортировать: ${title}" title="Сортировка по возрастанию / убыванию">${title} ${registrySort === key ? (registryDirection === "asc" ? "↑" : "↓") : "↕"}</button>`);
     root.innerHTML = table(headers,
-      data.items.map(({ record: r, price: p, source_url: url }) => `<tr>
+      data.items.map(({ record: r, price: p, manual_price: manual, source_url: url }) => `<tr>
         <td>${esc(r.reg_number)}</td><td>${esc(r.name)}</td><td>${esc(r.owner)}</td>
         <td>${r.exclusion_date ? `Исключено: ${esc(r.exclusion_date)}` : "В реестре"}</td>
-        <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "-"}</td>
+        <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
+          <button class="btn secondary" type="button" data-price-number="${r.reg_number}"
+            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(r.name)}">Изменить</button></td>
         <td>${sourceLink(url, "Источник")}</td></tr>`));
     root.removeAttribute("aria-busy");
     document.getElementById("registry-count").textContent = data.total ? `${registryOffset + 1}–${Math.min(registryOffset + 50, data.total)} из ${data.total}` : "Реестр пока пуст";
     document.getElementById("registry-prev").disabled = registryOffset === 0;
     document.getElementById("registry-next").disabled = registryOffset + 50 >= data.total;
-    document.getElementById("registry-excel").href = `/api/admin/registry/export.xlsx?${registryParams()}`;
   } catch (err) { renderError(root, err); }
 }
 
+const priceDialog = document.getElementById("registry-price-dialog");
+const priceForm = document.getElementById("registry-price-form");
+const priceValue = document.getElementById("registry-price-value");
+const priceError = document.getElementById("registry-price-error");
+
+priceForm.addEventListener("submit", async event => {
+  if (event.submitter?.formMethod === "dialog") return;
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  priceError.textContent = "";
+  try {
+    await SZI.request(`/api/admin/registry/${priceForm.dataset.number}/price`, {
+      method: "PUT",
+      body: JSON.stringify({value: priceValue.value === "" ? null : priceValue.valueAsNumber}),
+    });
+    priceDialog.close();
+    await loadRegistry();
+  } catch (error) {
+    priceError.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
 document.getElementById("registry-table").addEventListener("click", event => {
+  const editPrice = event.target.closest("[data-price-number]");
+  if (editPrice) {
+    priceForm.dataset.number = editPrice.dataset.priceNumber;
+    priceValue.value = editPrice.dataset.priceValue;
+    priceError.textContent = "";
+    priceDialog.showModal();
+    return;
+  }
   const button = event.target.closest("[data-sort]");
   if (!button) return;
   registryDirection = registrySort === button.dataset.sort && registryDirection === "asc" ? "desc" : "asc";
@@ -419,11 +453,14 @@ document.querySelectorAll("[data-registry-state]").forEach(button => {
     loadRegistry();
   });
 });
+const downloadDialog = document.getElementById("registry-download-dialog");
+document.getElementById("registry-download").addEventListener("click", () => downloadDialog.showModal());
 document.querySelectorAll("[data-official-format]").forEach(control => control.addEventListener("click", async event => {
   const button = event.currentTarget;
   const status = document.getElementById("registry-download-status");
   const format = button.dataset.officialFormat;
   button.disabled = true;
+  downloadDialog.close();
   status.textContent = `Скачивание ${format.toUpperCase()} с сайта реестра…`;
   try {
     const response = await fetch(`/api/admin/registry/download/${format}`, { credentials: "same-origin" });
@@ -435,7 +472,8 @@ document.querySelectorAll("[data-official-format]").forEach(control => control.a
     const a = document.createElement("a");
     a.href = url; a.download = `registry.${format}`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    status.textContent = `${format.toUpperCase()} скачан.`;
+    status.textContent = response.headers.get("X-Registry-Source") === "cache"
+      ? "Скачана последняя сохранённая выгрузка." : `${format.toUpperCase()} скачан.`;
   } catch (error) { status.textContent = error.message; }
   finally { button.disabled = false; }
 }));
@@ -453,29 +491,34 @@ async function pollPrices() {
   clearTimeout(priceTimer);
   try {
     const job = await SZI.request("/api/admin/registry/prices/status");
-    const running = job.status === "running";
+    const running = ["running", "stopping"].includes(job.status);
     document.getElementById("collect-prices").disabled = running;
-    document.getElementById("retry-prices").disabled = running;
-    document.getElementById("refresh-prices").disabled = running;
+    document.getElementById("stop-prices").disabled = job.status !== "running";
     document.getElementById("price-progress").textContent = job.status === "idle" ? "" :
-      `${running ? "Обработка" : job.status === "failed" ? "Сбой" : "Завершено"}: ${job.done}/${job.total}, ошибок: ${job.errors}. ${job.message || ""}`;
+      `${({running: "Обработка", stopping: "Остановка", stopped: "Остановлено", failed: "Сбой", completed: "Завершено"})[job.status]}: ${job.done}/${job.total}, ошибок: ${job.errors}. ${job.message || ""}`;
     if (running) priceTimer = setTimeout(pollPrices, 2000);
     else if (job.status !== "idle") await loadRegistry();
   } catch (err) { document.getElementById("price-progress").textContent = err.message; }
 }
 
-async function startPrices(retry, refresh = false) {
-  document.getElementById("collect-prices").disabled = true;
-  document.getElementById("retry-prices").disabled = true;
-  document.getElementById("refresh-prices").disabled = true;
+document.getElementById("collect-prices").addEventListener("click", async event => {
+  event.currentTarget.disabled = true;
   try {
-    await SZI.request(`/api/admin/registry/prices?retry=${retry}&refresh=${refresh}`, { method: "POST" });
-  } catch (err) { showFlash(document.getElementById("page-registry"), err.message); }
+    await SZI.request("/api/admin/registry/prices", {method: "POST"});
+  } catch (error) {
+    showFlash(document.getElementById("page-registry"), error.message);
+  }
   await pollPrices();
-}
-document.getElementById("collect-prices").addEventListener("click", () => startPrices(false));
-document.getElementById("retry-prices").addEventListener("click", () => startPrices(true));
-document.getElementById("refresh-prices").addEventListener("click", () => startPrices(false, true));
+});
+document.getElementById("stop-prices").addEventListener("click", async event => {
+  event.currentTarget.disabled = true;
+  try {
+    await SZI.request("/api/admin/registry/prices/stop", {method: "POST"});
+  } catch (error) {
+    showFlash(document.getElementById("page-registry"), error.message);
+  }
+  await pollPrices();
+});
 
 (async () => {
   const user = await SZI.requireAdmin();

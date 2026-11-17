@@ -79,8 +79,8 @@ def test_parser_reports_bad_rows(tmp_path):
     path = tmp_path / "input.xlsx"
     path.write_bytes(workbook([[7, "ПО"], [7, "Дубликат"], ["bad", "Ошибка"], [8, ""]]))
     bundle, errors = RegistryImporter().parse(path)
-    assert len(bundle.items) == 1
-    assert len(errors) == 3
+    assert [item.name for item in bundle.items] == ["ПО", "Запись №8 (без наименования)"]
+    assert len(errors) == 2
 
 
 def test_registry_routes_require_admin(client):
@@ -235,3 +235,46 @@ def test_json_bundle_roundtrip(client):
     exported = client.get("/api/admin/export").json()
     assert exported["profiles"][0]["mandatory"] == ["R1"]
     assert exported["items"][0]["covers"] == ["R1"]
+
+
+def test_registry_import_and_manual_price(client):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    root = "/api/admin/registry"
+    upload = "/api/admin/import/ru-software"
+    xml = b"<registry><item><registrationNumber>1</registrationNumber></item></registry>"
+    result = client.post(upload, files={"file": ("registry.xml", xml)})
+    assert result.status_code == 200
+    assert result.json()["errors"] == []
+
+    result = client.post(
+        upload, files={"file": ("registry.json", b'[{"reg_number": 1, "name": ""}]')}
+    )
+    assert result.json()["imported"] == 1
+    assert result.json()["errors"] == []
+    assert client.put(f"{root}/1/price", json={"value": 0}).status_code == 204
+    assert client.post(upload, files={"file": ("registry.xml", xml)}).status_code == 200
+    row = client.get(root).json()["items"][0]
+    assert row["record"]["name"] == "Запись №1 (без наименования)"
+    assert row["manual_price"] == row["price"]["value"] == 0
+    assert client.put(f"{root}/1/price", json={"value": None}).status_code == 204
+    assert client.get(root).json()["items"][0]["price"] is None
+
+
+def test_official_download_uses_last_successful_copy(client, monkeypatch):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+
+    def download(target):
+        target.write_bytes(b"<registry/>")
+        return target
+
+    monkeypatch.setattr("app.api.app.download_registry_xml", download)
+    url = "/api/admin/registry/download/xml"
+    assert client.get(url).content == b"<registry/>"
+
+    def unavailable(target):
+        raise OSError("Сайт недоступен")
+
+    monkeypatch.setattr("app.api.app.download_registry_xml", unavailable)
+    cached = client.get(url)
+    assert cached.content == b"<registry/>"
+    assert cached.headers["X-Registry-Source"] == "cache"

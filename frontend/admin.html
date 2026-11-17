@@ -97,35 +97,43 @@
       </section>
 
       <section id="page-registry" class="hidden">
-        <div class="top"><div><p class="eyebrow">Источник средств</p>
-          <h1>Реестр российского ПО</h1>
-          <p class="lead">Загрузите выгрузку Excel, XML или базу SQLite из прежних скриптов. Связи с требованиями задаются в разделе «Средства».</p>
-        </div></div>
+        <div class="top"><h1>Реестр российского ПО</h1></div>
         <div class="card">
-          <div class="toolbar upload-bar">
-            <label class="btn secondary file-btn">Импортировать XLSX / XML / SQLite
-              <input type="file" accept=".xlsx,.xml,.db,.sqlite,.sqlite3" data-upload="registry">
-            </label>
-            <span class="upload-status" data-upload-status="registry">Файл не выбран</span>
-          </div>
           <div class="toolbar">
-            <button class="btn secondary" id="download-registry" data-official-format="xml" type="button">Скачать XML с сайта реестра</button>
-            <button class="btn secondary" data-official-format="html" type="button">Скачать HTML с сайта</button>
-            <button class="btn secondary" data-official-format="xls" type="button">Скачать XLS с сайта</button>
-            <a class="btn secondary" id="registry-excel" href="/api/admin/registry/export.xlsx">Экспорт в Excel</a>
+            <label class="btn secondary file-btn">Импорт файла
+              <input type="file" accept=".xml,.xls,.xlsx,.json,.db,.sqlite,.sqlite3" data-upload="registry">
+            </label>
+            <button class="btn secondary" id="registry-download" type="button">Скачать</button>
           </div>
-          <p id="registry-download-status" role="status" aria-live="polite"></p>
-          <p>Повторный импорт обновляет сведения реестра, сохраняя ручные настройки средств.</p>
+          <div class="upload-status" data-upload-status="registry" role="status"></div>
+          <div id="registry-download-status" role="status"></div>
           <div class="toolbar">
             <button class="btn" id="collect-prices" type="button">Получить стоимость</button>
-            <button class="btn secondary" id="retry-prices" type="button">Повторить без результата</button>
-            <button class="btn secondary" id="refresh-prices" type="button">Пересчитать стоимость</button>
-            <span id="price-progress" role="status" aria-live="polite"></span>
+            <button class="btn secondary" id="stop-prices" type="button" disabled>Остановить</button>
+            <span id="price-progress" role="status"></span>
           </div>
-          <p>Обычный запуск обрабатывает до 100 новых ссылок. Пересчёт обновляет все ссылки автоматически порциями по 100.
-          Цена из блока товара или прайса — ориентир:
-          проверьте лицензию, период и единицу поставки. OCR и выполнение JavaScript не поддерживаются.</p>
         </div>
+        <dialog id="registry-download-dialog">
+          <h2>Скачать реестр</h2>
+          <div class="toolbar">
+            <button class="btn" data-official-format="xml" type="button">XML</button>
+            <button class="btn" data-official-format="xls" type="button">XLS</button>
+            <form method="dialog"><button class="btn secondary">Закрыть</button></form>
+          </div>
+        </dialog>
+        <dialog id="registry-price-dialog">
+          <form id="registry-price-form">
+            <h2>Стоимость</h2>
+            <label for="registry-price-value">Цена, ₽</label>
+            <input id="registry-price-value" type="number" min="0" step="any">
+            <p>Пустое поле возвращает цену из источника.</p>
+            <div class="toolbar">
+              <button class="btn" type="submit">Сохранить</button>
+              <button class="btn secondary" type="submit" formmethod="dialog">Отмена</button>
+            </div>
+            <div id="registry-price-error" role="status"></div>
+          </form>
+        </dialog>
         <div class="toolbar" role="group" aria-label="Статус записей реестра">
           <button class="btn" type="button" data-registry-state="active" aria-pressed="true">Актуальное ПО</button>
           <button class="btn secondary" type="button" data-registry-state="excluded" aria-pressed="false">Исключённое ПО</button>

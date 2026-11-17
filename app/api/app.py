@@ -9,7 +9,8 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from shutil import copyfile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Literal
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
@@ -28,7 +29,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from starlette.background import BackgroundTask
 
 from app import __version__, paths
@@ -62,6 +63,10 @@ from app.storage.sqlite import SQLiteRepository
 
 def not_implemented() -> HTTPException:
     return HTTPException(status_code=501, detail="Ещё не реализовано")
+
+
+class ManualRegistryPrice(BaseModel):
+    value: float | None = Field(ge=0, allow_inf_nan=False)
 
 
 def create_app(
@@ -311,7 +316,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Неизвестный импортёр")
         suffix = Path(file.filename or "").suffix.lower()
         extensions = {
-            "ru-software": {".xlsx", ".xml"},
+            "ru-software": {".xlsx", ".xls", ".xml", ".json"},
             "ru-software-sqlite": {".db", ".sqlite", ".sqlite3"},
             "bundle": {".json"},
         }
@@ -376,6 +381,7 @@ def create_app(
     @admin.get("/registry/download/{format}")
     def download_official(format: Literal["xml", "html", "xls"]):
         directory = TemporaryDirectory()
+        cache = paths.data_dir() / "registry-cache" / f"registry.{format}"
         try:
             target = Path(directory.name) / f"registry.{format}"
             target = (
@@ -383,6 +389,14 @@ def create_app(
                 if format == "xml"
                 else download_registry_export(target, format)
             )
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            with NamedTemporaryFile(dir=cache.parent, delete=False) as output:
+                cached_copy = Path(output.name)
+            try:
+                copyfile(target, cached_copy)
+                cached_copy.replace(cache)
+            finally:
+                cached_copy.unlink(missing_ok=True)
             return FileResponse(
                 target,
                 filename=f"registry.{format}",
@@ -395,12 +409,25 @@ def create_app(
             )
         except (httpx.HTTPError, ValueError, OSError) as exc:
             directory.cleanup()
+            if cache.is_file():
+                return FileResponse(
+                    cache, filename=cache.name, headers={"X-Registry-Source": "cache"}
+                )
             message = "Не удалось скачать выгрузку с официального сайта. "
             if "CERTIFICATE_VERIFY_FAILED" in str(exc):
                 message += "Сертификат сайта не доверен этой системе."
             else:
                 message += str(exc)[:250]
             raise HTTPException(status_code=502, detail=message) from exc
+
+    @admin.put("/registry/{number}/price", status_code=204)
+    def update_registry_price(number: int, body: ManualRegistryPrice) -> None:
+        if not registry.store.set_manual_price(number, body.value):
+            raise HTTPException(status_code=404, detail="Запись не найдена")
+
+    @admin.post("/registry/prices/stop")
+    def stop_prices() -> dict:
+        return registry.stop()
 
     @admin.post("/registry/prices", status_code=202)
     def start_prices(
@@ -409,7 +436,7 @@ def create_app(
         refresh: bool = False,
         limit: int = Query(100, ge=1, le=1000),
     ) -> dict:
-        """При refresh=true limit задаёт размер порции полного пересчёта, иначе лимит задачи."""
+        """Параметр limit задаёт размер порции, а не общий объём задачи."""
         try:
             result = registry.start(retry, limit, refresh)
         except ValueError as exc:

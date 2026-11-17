@@ -15,8 +15,20 @@ class RegistryStore:
         with closing(sqlite3.connect(path)) as con, con:
             con.execute(
                 "CREATE TABLE IF NOT EXISTS registry "
-                "(reg_number INTEGER PRIMARY KEY, data TEXT NOT NULL, price TEXT)"
+                "(reg_number INTEGER PRIMARY KEY, data TEXT NOT NULL, "
+                "price TEXT, manual_price REAL)"
             )
+
+            columns = {row[1] for row in con.execute("PRAGMA table_info(registry)")}
+            if "manual_price" not in columns:
+                con.execute("ALTER TABLE registry ADD COLUMN manual_price REAL")
+
+    def set_manual_price(self, number: int, value: float | None) -> bool:
+        with closing(sqlite3.connect(self.path)) as con, con:
+            cursor = con.execute(
+                "UPDATE registry SET manual_price=? WHERE reg_number=?", (value, number)
+            )
+            return cursor.rowcount > 0
 
     def upsert(self, records: list[RegistryRecord]) -> None:
         with closing(sqlite3.connect(self.path)) as con, con:
@@ -43,9 +55,10 @@ class RegistryStore:
                 dict(
                     record=RegistryRecord.model_validate_json(data).model_dump(),
                     price=PriceResult.model_validate_json(price).model_dump() if price else None,
+                    manual_price=manual_price,
                 )
-                for data, price in con.execute(
-                    "SELECT data, price FROM registry ORDER BY reg_number"
+                for data, price, manual_price in con.execute(
+                    "SELECT data, price, manual_price FROM registry ORDER BY reg_number"
                 )
             ]
 
@@ -68,6 +81,8 @@ class RegistryStore:
                 ).casefold()
             ]
         for row in rows:
+            if row["manual_price"] is not None:
+                row["price"] = PriceResult(status="ok", value=row["manual_price"]).model_dump()
             row["source_url"] = source_url(
                 (row["price"] or {}).get("source_url") or row["record"]["cost_url"]
             )
