@@ -169,7 +169,7 @@ svg { display: block; width: 20px; height: 20px; }
 .action-copy small { color: #919caf; font-size: 9.5px; line-height: 1.5; }
 .action-arrow { margin-left: auto; color: #a3adbc; font-size: 17px; line-height: 1.05; }
 .builder-layout { display: grid; grid-template-columns: minmax(285px, .82fr) minmax(0, 1.55fr); align-items: start; gap: 16px; }
-.scenario-panel { position: sticky; top: 82px; padding: 18px; }
+.scenario-panel { padding: 18px; }
 .heading-symbol { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; border: 1px solid #e2e9f9; border-radius: 9px; color: #5a78bb; background: #f6f8ff; }
 .heading-symbol svg { width: 17px; height: 17px; }
 .control-label { display: block; margin: 19px 0 7px; color: #48566d; font-size: 10px; font-weight: 720; }
@@ -203,7 +203,7 @@ svg { display: block; width: 20px; height: 20px; }
 .requirement-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 7px 5px; color: #52627c; }
 .requirement-group-heading strong { font-size: 9px; font-weight: 800; letter-spacing: .03em; }
 .requirement-group-heading span { color: #9aa5b6; font-size: 8px; }
-.requirements-list { display: flex; flex-direction: column; gap: 2px; max-height: 290px; overflow: auto; padding-right: 2px; }
+.requirements-list { display: flex; flex-direction: column; gap: 2px; max-height: min(42vh, 360px); overflow: auto; padding-right: 2px; }
 .requirement-choice { display: flex; align-items: flex-start; gap: 9px; padding: 8px 7px; border-radius: 8px; cursor: pointer; transition: background .15s; }
 .requirement-choice:hover { background: #f7f9fd; }
 .requirement-choice input { width: 14px; height: 14px; margin: 2px 0 0; accent-color: var(--blue); cursor: pointer; }
@@ -237,7 +237,9 @@ svg { display: block; width: 20px; height: 20px; }
 .catalog-tab { min-height: 27px; padding: 0 9px; border: 1px solid transparent; border-radius: 6px; color: #8490a4; background: transparent; font-size: 9px; font-weight: 650; cursor: pointer; white-space: nowrap; }
 .catalog-tab:hover { color: #4c5c76; }
 .catalog-tab.is-active { border-color: #e3e9f5; color: #365ea9; background: #fff; box-shadow: 0 1px 2px rgba(25,44,77,.04); }
-.catalog-list { display: flex; flex-direction: column; gap: 9px; }
+.catalog-list { display: flex; flex-direction: column; gap: 9px; max-height: min(68vh, 640px); overflow: auto; padding-right: 4px; }
+.catalog-page-size { display: flex; align-items: center; gap: 6px; color: #8490a4; font-size: 9px; font-weight: 650; white-space: nowrap; }
+.catalog-page-size select { height: 27px; padding: 0 8px; border: 1px solid #e3e9f5; border-radius: 6px; color: #365ea9; background: #fff; font-size: 9px; font-weight: 650; cursor: pointer; }
 .catalog-item { display: grid; grid-template-columns: 36px minmax(0,1fr) 36px; align-items: start; gap: 11px; padding: 12px; border: 1px solid #e9edf4; border-radius: 11px; background: #fff; transition: border-color .15s, background .15s; }
 .catalog-item.is-selected { border-color: #bfcff4; background: #fbfcff; }
 .catalog-item-icon { display: grid; width: 35px; height: 35px; place-items: center; border: 1px solid #e4eaf7; border-radius: 10px; color: #5b79bd; background: #f5f8ff; }
@@ -326,12 +328,13 @@ svg { display: block; width: 20px; height: 20px; }
 .mode-option small { color: #919bad; font-size: 9px; line-height: 1.5; }
 .budget-field[hidden] { display: none; }
 .budget-field .control-label { margin-top: 15px; }
+.button[hidden] { display: none; }
 .full-button { width: 100%; margin-top: 22px; }
 .optimizer-note { margin: 10px 0 0; color: #9aa4b3; font-size: 9px; line-height: 1.55; text-align: center; }
 .result-chip { display: inline-flex; align-items: center; padding: 6px 8px; border-radius: 7px; color: #8a95a5; background: #f3f5f9; font-size: 9px; font-weight: 680; white-space: nowrap; }
 .result-chip.is-success { color: #16825b; background: #eaf8f1; }
 .result-chip.is-warning { color: #a26e19; background: #fff4dc; }
-.solution-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin: 22px 0 17px; }
+.solution-metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 22px 0 17px; }
 .solution-metrics > div { display: flex; flex-direction: column; gap: 8px; padding: 13px 11px; border: 1px solid #edf0f5; border-radius: 9px; background: #fbfcfe; }
 .solution-metrics span { color: #8894a6; font-size: 9px; }
 .solution-metrics strong { overflow: hidden; color: #26364d; font-size: clamp(15px, 1.6vw, 21px); letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }

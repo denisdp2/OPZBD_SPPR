@@ -364,6 +364,11 @@ function miniIcon(kind) {
 
 const CATALOG_PAGE_SIZE = 60;
 
+function catalogPageSize() {
+  const value = $("#catalog-page-size")?.value ?? String(CATALOG_PAGE_SIZE);
+  return value === "all" ? Number.POSITIVE_INFINITY : Number(value) || CATALOG_PAGE_SIZE;
+}
+
 function renderCatalog() {
   const list = $("#catalog-list");
   if (!list) return;
@@ -545,6 +550,13 @@ function updateModeVisibility() {
   $("#budget-field").hidden = mode !== "max_coverage";
 }
 
+function formatElapsed(elapsedMs) {
+  const value = Number(elapsedMs);
+  if (!Number.isFinite(value)) return "—";
+  if (value < 1000) return `${Math.max(1, Math.round(value))} мс`;
+  return `${(value / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} с`;
+}
+
 function renderSolution(solution, source = "example") {
   state.lastOptimization = solution;
   $("#solution-empty").hidden = true;
@@ -552,6 +564,8 @@ function renderSolution(solution, source = "example") {
   $("#solution-cost").textContent = money(solution.cost);
   $("#solution-covered").textContent = `${solution.covered_count} из ${state.selectedRequirements.size}`;
   $("#solution-items-count").textContent = String(solution.selected.length);
+  const elapsed = $("#solution-time");
+  if (elapsed) elapsed.textContent = formatElapsed(solution.elapsed_ms);
   const selectedSet = new Set(solution.selected);
   const selectedItemsForResult = selectedItems().filter(({ item }) => selectedSet.has(item.id));
   $("#solution-items").innerHTML = selectedItemsForResult.length ? selectedItemsForResult.map(({ item, total }) => (
@@ -722,26 +736,40 @@ async function runOptimization() {
   };
   state.isCalculating = true;
   const button = $("#run-optimization");
+  const stopButton = $("#stop-optimization");
+  const controller = new AbortController();
+  state.optimizationAbort = controller;
+  if (stopButton) stopButton.hidden = false;
   setLoading(button, true, "Подбираем…");
   let solution;
   let solutionSource = "server";
   let paretoSource = "server";
+  let stopped = false;
   try {
     if (state.usingExamples) throw new Error("Примерные справочники");
-    solution = await workspaceService.optimize(payload);
-  } catch {
-    solution = localOptimize(payload);
-    solutionSource = "example";
-    paretoSource = "example";
-    if (!state.problems.includes("Оптимизация: серверный метод недоступен, выполнен локальный расчёт")) state.problems.push("Оптимизация: серверный метод недоступен, выполнен локальный расчёт");
-    renderApiState();
+    solution = await workspaceService.optimize(payload, controller.signal);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      stopped = true;
+    } else {
+      solution = localOptimize(payload);
+      solutionSource = "example";
+      paretoSource = "example";
+      if (!state.problems.includes("Оптимизация: серверный метод недоступен, выполнен локальный расчёт")) state.problems.push("Оптимизация: серверный метод недоступен, выполнен локальный расчёт");
+      renderApiState();
+    }
   }
   try {
+    if (stopped) return;
     let pareto;
     if (paretoSource === "server") {
       try {
-        pareto = await workspaceService.pareto(payload);
-      } catch {
+        pareto = await workspaceService.pareto(payload, controller.signal);
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          stopped = true;
+          return;
+        }
         pareto = localPareto(payload.scenario);
         paretoSource = "example";
         if (!state.problems.includes("Фронт Парето: серверный метод недоступен, построен локальный график")) state.problems.push("Фронт Парето: серверный метод недоступен, построен локальный график");
@@ -752,17 +780,33 @@ async function runOptimization() {
     }
     state.lastPareto = Array.isArray(pareto) ? pareto : [];
   } finally {
+    if (stopButton) stopButton.hidden = true;
+    state.optimizationAbort = null;
+    state.isCalculating = false;
+    setLoading(button, false);
+    if (stopped) {
+      showToast("Расчёт остановлен.", "info");
+      return;
+    }
     state.lastOptimization = solution;
     renderSolution(solution, solutionSource);
     renderPareto(state.lastPareto, solution);
-    state.isCalculating = false;
-    setLoading(button, false);
     showToast(solutionSource === "server"
       ? "Подбор завершён на сервере."
       : state.usingExamples
         ? "Показан локальный подбор на демонстрационных данных."
         : "API оптимизации пока недоступен: вариант подобран локально по данным сервера.", solutionSource === "server" ? "success" : "info");
   }
+}
+
+async function stopOptimization() {
+  const controller = state.optimizationAbort;
+  try {
+    await workspaceService.cancelOptimization();
+  } catch {
+    /* сервер уже завершил расчёт */
+  }
+  controller?.abort();
 }
 
 function selectItem(itemId) {
@@ -858,19 +902,24 @@ function bindEvents() {
   });
   $("#catalog-list").addEventListener("change", onCostChange);
   $("#catalog-show-more").addEventListener("click", () => {
-    state.catalogLimit += CATALOG_PAGE_SIZE;
+    const pageSize = catalogPageSize();
+    if (Number.isFinite(pageSize)) state.catalogLimit += pageSize;
+    renderCatalog();
+  });
+  $("#catalog-page-size").addEventListener("change", () => {
+    state.catalogLimit = catalogPageSize();
     renderCatalog();
   });
   let searchTimer;
   $("#catalog-search").addEventListener("input", (event) => {
     state.search = event.target.value;
-    state.catalogLimit = CATALOG_PAGE_SIZE;
+    state.catalogLimit = catalogPageSize();
     clearTimeout(searchTimer);
     searchTimer = setTimeout(renderCatalog, 250);
   });
   $$(".catalog-tab").forEach((tab) => tab.addEventListener("click", () => {
     state.activeKind = tab.dataset.kind;
-    state.catalogLimit = CATALOG_PAGE_SIZE;
+    state.catalogLimit = catalogPageSize();
     $$(".catalog-tab").forEach((other) => other.classList.toggle("is-active", other === tab));
     renderCatalog();
   }));
@@ -884,6 +933,7 @@ function bindEvents() {
   $("#run-optimization").addEventListener("click", runOptimization);
   $("#algorithm-select").addEventListener("change", updateAlgorithmDescription);
   $$('input[name="opt-mode"]').forEach((input) => input.addEventListener("change", updateModeVisibility));
+  $("#stop-optimization")?.addEventListener("click", stopOptimization);
   $("#refresh-data").addEventListener("click", async () => {
     showToast("Обновляем справочники…");
     await loadPageData();

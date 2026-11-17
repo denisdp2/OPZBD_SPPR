@@ -1,9 +1,12 @@
 """HTTP API. Справочники и импорт работают через интерфейс Repository.
 
-Модуль принятия решений пока не подключён. Описание API: /docs.
+Оценка выбранного набора пока не подключена. Подбор набора идёт через алгоритмы
+из app.optimization. Описание API: /docs.
 """
 
+import asyncio
 import sqlite3
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -46,8 +49,12 @@ from app.core.models import (
     Scenario,
     Solution,
 )
+from app.core.problem import ScenarioError, build_problem
 from app.importers.registry_download import download_registry_export, download_registry_xml
 from app.importers.service import RegistryService
+from app.optimization import UnknownOptimizer, get_optimizer
+from app.optimization import list_optimizers as optimizer_catalog
+from app.optimization.cancel import OptimizationCancelled, bind, reset
 from app.storage.registry import RegistryStore
 from app.storage.registry_export import export_registry_xlsx
 from app.storage.sqlite import SQLiteRepository
@@ -64,6 +71,7 @@ def create_app(
     app = FastAPI(title="СППР: подбор средств и мер защиты", version=__version__)
     repo = repo if repo is not None else SQLiteRepository(paths.data_dir() / "catalog.sqlite3")
     app.state.repo = repo
+    app.state.opt_cancel = None
     registry = RegistryService(repo, RegistryStore(paths.data_dir() / "catalog.sqlite3"))
     app.state.registry = registry
 
@@ -146,19 +154,77 @@ def create_app(
         """Оценка набора: закрыты ли обязательные требования, стоимость."""
         raise not_implemented()
 
+    def problem_from(req: OptimizeRequest):
+        try:
+            return build_problem(req.scenario, repo)
+        except ScenarioError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    def optimizer_from(name: str):
+        try:
+            return get_optimizer(name)
+        except UnknownOptimizer as exc:
+            raise HTTPException(status_code=404, detail="Алгоритм не найден") from exc
+
     @api.get("/optimizers", tags=["decision"])
     def list_optimizers() -> list[OptimizerInfo]:
-        raise not_implemented()
+        return optimizer_catalog()
+
+    def run_cancellable(fn):
+        event = threading.Event()
+        app.state.opt_cancel = event
+
+        def wrapped():
+            token = bind(event)
+            try:
+                return fn()
+            finally:
+                reset(token)
+
+        return event, wrapped
+
+    @api.post("/optimize/cancel", tags=["decision"])
+    def cancel_optimization() -> dict:
+        event = app.state.opt_cancel
+        if event is not None:
+            event.set()
+        return {"status": "stopping"}
 
     @api.post("/optimize", tags=["decision"])
-    def optimize(req: OptimizeRequest) -> Solution:
+    async def optimize(req: OptimizeRequest) -> Solution:
         """Подбор оптимального набора выбранным алгоритмом."""
-        raise not_implemented()
+        if req.mode == "max_coverage" and req.budget is None:
+            raise HTTPException(
+                status_code=422, detail="Для режима максимального покрытия нужен бюджет"
+            )
+        problem = problem_from(req)
+        optimizer = optimizer_from(req.algorithm)
+        event, wrapped = run_cancellable(lambda: optimizer.solve(problem, req.mode, req.budget))
+        try:
+            return await asyncio.to_thread(wrapped)
+        except OptimizationCancelled as exc:
+            raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        finally:
+            if app.state.opt_cancel is event:
+                app.state.opt_cancel = None
 
     @api.post("/pareto", tags=["decision"])
-    def pareto(req: OptimizeRequest) -> list[Solution]:
+    async def pareto(req: OptimizeRequest) -> list[Solution]:
         """Парето-фронт «стоимость / число закрытых требований»."""
-        raise not_implemented()
+        problem = problem_from(req)
+        optimizer = optimizer_from(req.algorithm)
+        event, wrapped = run_cancellable(lambda: optimizer.pareto(problem))
+        try:
+            return await asyncio.to_thread(wrapped)
+        except OptimizationCancelled as exc:
+            raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=400, detail="Алгоритм не строит Парето-фронт") from exc
+        finally:
+            if app.state.opt_cancel is event:
+                app.state.opt_cancel = None
 
     # ------------------------------------------------------------------ #
     #  Администрирование

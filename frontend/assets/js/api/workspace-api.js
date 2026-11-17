@@ -14,6 +14,7 @@ export const workspaceApi = Object.freeze({
   profiles: () => request("/profiles"),
   optimizers: () => request("/optimizers"),
   evaluate: (scenario) => request("/evaluate", { method: "POST", body: scenario }),
-  optimize: (payload) => request("/optimize", { method: "POST", body: payload }),
-  pareto: (payload) => request("/pareto", { method: "POST", body: payload }),
+  optimize: (payload, signal) => request("/optimize", { method: "POST", body: payload, signal }),
+  pareto: (payload, signal) => request("/pareto", { method: "POST", body: payload, signal }),
+  cancelOptimization: () => request("/optimize/cancel", { method: "POST" }),
 });
