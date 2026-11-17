@@ -1,7 +1,4 @@
-/**
- * Demo-only auth provider. Data lives in memory and disappears on page reload.
- * This module is not suitable for production authentication.
- */
+// Тестовые аккаунты хранятся в памяти до перезагрузки страницы.
 const accounts = new Map();
 
 function normalizeLogin(login) {
@@ -44,7 +41,6 @@ export const authMockApi = Object.freeze({
 
   async requestPasswordReset({ login }) {
     await waitForDemoResponse();
-    // Generic response avoids revealing whether a particular account exists.
     return {
       message: "Запрос принят.",
     };

@@ -17,7 +17,7 @@ def item_cost(capex: float, opex_month: float, period_months: float) -> float:
 
 
 def build_problem(scenario: Scenario, repo: Repository) -> Problem:
-    """Превратить Scenario в самодостаточную Problem."""
+    """Собрать данные для расчёта из сценария и справочников."""
     requirements = list(dict.fromkeys(scenario.requirements))
     known = set(requirements)
     for req_id in requirements:

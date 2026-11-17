@@ -1,7 +1,4 @@
-/**
- * Illustrative catalogue for UI development only.
- * Example names and requirement codes are for interface preview only, not a normative catalogue.
- */
+// Примерные данные для демонстрации интерфейса.
 export const demoRequirements = [
   { id: "REQ-01", group: "Доступ", title: "Идентификация и аутентификация пользователей", source: "Пример требования", description: "Учётные записи и проверка подлинности пользователей." },
   { id: "REQ-02", group: "Доступ", title: "Разграничение прав доступа", source: "Пример требования", description: "Назначение прав в соответствии с рабочими задачами." },

@@ -6,7 +6,6 @@ const request = (path, options = {}) => apiRequest(path, {
   baseUrl: APP_CONFIG.workspaceApiBaseUrl,
 });
 
-/** REST endpoints already declared by the FastAPI app. */
 export const workspaceApi = Object.freeze({
   health: () => request("/health"),
   requirements: () => request("/requirements"),
