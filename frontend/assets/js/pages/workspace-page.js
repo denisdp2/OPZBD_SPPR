@@ -913,6 +913,13 @@ function bindEvents() {
     invalidateResults();
     renderAll();
   });
+  $("#period-input").addEventListener("input", (event) => {
+    const input = event.target;
+    if (!input.validity.valid || input.value === "") return;
+    state.periodMonths = Number(input.value);
+    invalidateResults();
+    updateBuilderSummary();
+  });
   $("#period-input").addEventListener("change", (event) => {
     const raw = Number(event.target.value);
     const value = Math.min(120, Math.max(0.1, Math.round((Number.isFinite(raw) && event.target.value !== "" ? raw : 12) * 10) / 10));
@@ -984,7 +991,7 @@ function bindEvents() {
     updateAlgorithmDescription();
     queueDraftSave();
   });
-  $("#budget-input").addEventListener("change", queueDraftSave);
+  $("#budget-input").addEventListener("input", queueDraftSave);
   $$('input[name="opt-mode"]').forEach((input) => input.addEventListener("change", () => {
     updateModeVisibility();
     queueDraftSave();
