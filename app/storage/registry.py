@@ -4,6 +4,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from app.core.models import Item
 from app.importers.prices import PriceResult
 from app.importers.registry import RegistryRecord
 from app.importers.urls import canonical_links, source_url
@@ -65,6 +66,73 @@ class RegistryStore:
                     "SELECT data, price, manual_price FROM registry ORDER BY reg_number"
                 )
             ]
+
+    def tools_page(self, q, state, sort, descending, offset, limit) -> dict:
+        sort_columns = {
+            "reg_number": "reg_number",
+            "id": "casefold(id)",
+            "name": "casefold(json_extract(item, '$.name'))",
+            "covers": "casefold(COALESCE(json_extract(item, '$.covers'), '[]'))",
+            "owner": "casefold(COALESCE(json_extract(item, '$.vendor'), ''))",
+            "status": "excluded",
+            "value": "value",
+            "source": "casefold(COALESCE(url, ''))",
+        }
+        order = sort_columns[sort]
+        direction = "DESC" if descending else "ASC"
+        base = """
+            WITH tools AS (
+                SELECT c.id, c.data AS item, r.data AS record, r.price, r.manual_price,
+                    r.reg_number,
+                    COALESCE(json_extract(r.data, '$.exclusion_date'), '') AS excluded,
+                    COALESCE(r.manual_price, CASE
+                        WHEN json_extract(r.price, '$.status') IN ('ok', 'free')
+                        THEN json_extract(r.price, '$.value') END) AS value,
+                    COALESCE(NULLIF(json_extract(r.price, '$.source_url'), ''),
+                        json_extract(r.data, '$.cost_url')) AS url
+                FROM catalog AS c
+                LEFT JOIN registry AS r ON r.reg_number = CAST(substr(c.id, 13) AS INTEGER)
+                    AND c.id = 'ru-software-' || r.reg_number
+                WHERE c.kind = 'items' AND json_extract(c.data, '$.kind') = 'tool'
+            )
+        """
+        where = """
+            WHERE (excluded != '') = ? AND
+              (? = '' OR instr(casefold(id || ' ' || json_extract(item, '$.name') || ' ' ||
+                COALESCE(json_extract(item, '$.vendor'), '')), ?) > 0)
+        """
+        query = q.strip().casefold()
+        params = (state == "excluded", query, query)
+        with closing(sqlite3.connect(self.path)) as con, con:
+            con.create_function("casefold", 1, str.casefold, deterministic=True)
+            con.execute("BEGIN")
+            total = con.execute(base + "SELECT COUNT(*) FROM tools " + where, params).fetchone()[0]
+            rows = con.execute(
+                base
+                + "SELECT item, record, price, manual_price, url FROM tools "
+                + where
+                + f"ORDER BY ({order}) IS NULL, {order} {direction}, id LIMIT ? OFFSET ?",
+                (*params, limit, offset),
+            ).fetchall()
+        items = []
+        for item, record, price, manual_price, url in rows:
+            result = (
+                PriceResult(status="ok", value=manual_price)
+                if manual_price is not None
+                else PriceResult.model_validate_json(price)
+                if price
+                else None
+            )
+            items.append(
+                {
+                    "item": Item.model_validate_json(item),
+                    "record": RegistryRecord.model_validate_json(record) if record else None,
+                    "price": result,
+                    "manual_price": manual_price,
+                    "source_url": source_url(url) if url else None,
+                }
+            )
+        return {"total": total, "items": items}
 
     def query(self, q="", state="active", sort="reg_number", descending=False) -> list[dict]:
         rows = self.list_records()

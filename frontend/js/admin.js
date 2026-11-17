@@ -361,30 +361,6 @@ document.getElementById("logout").addEventListener("click", async () => {
   window.location.replace("/");
 });
 
-document.getElementById("export-btn").addEventListener("click", async () => {
-  const preview = document.getElementById("export-preview");
-  try {
-    const data = await SZI.request("/api/admin/export");
-    const text = JSON.stringify(data, null, 2);
-    preview.textContent = text;
-    preview.classList.remove("hidden");
-    const blob = new Blob([text], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "szi-bundle.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    preview.classList.remove("hidden");
-    preview.textContent = err.message;
-  }
-});
-
-document.getElementById("add-requirements").addEventListener("click", () => requirementsUi.openForm());
-document.getElementById("add-tools").addEventListener("click", () => toolsUi.openForm({ kind: "tool" }));
-document.getElementById("add-org").addEventListener("click", () => orgUi.openForm({ kind: "org" }));
-
 let registryOffset = 0;
 let registryQuery = "";
 let priceTimer;
@@ -401,9 +377,9 @@ function registryParams() {
 function sourceLink(url, label) {
   try {
     const parsed = new URL(url);
-    if (!["https:", "http:"].includes(parsed.protocol)) return "—";
+    if (!["https:", "http:"].includes(parsed.protocol)) return esc(label);
     return `<a href="${esc(parsed.href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
-  } catch { return "—"; }
+  } catch { return esc(label); }
 }
 
 async function loadRegistry() {
@@ -413,6 +389,7 @@ async function loadRegistry() {
     const params = registryParams();
     params.set("offset", registryOffset);
     params.set("limit", 50);
+    if (!root.innerHTML) root.textContent = "Загрузка средств…";
     root.setAttribute("aria-busy", "true");
     const data = await SZI.request(`/api/admin/tools?${params}`);
     if (request !== registryRequest) return;
@@ -421,17 +398,15 @@ async function loadRegistry() {
       return loadRegistry();
     }
     const columns = [["id", "Код"], ["name", "Название"], ["covers", "Закрывает"], ["owner", "Правообладатель"],
-      ["status", "Статус"], ["value", "Стоимость, руб."], ["source", "Источник"]];
+      ["value", "Стоимость, руб."]];
     const headers = columns.map(([key, title]) => `<button type="button" class="sort-column" data-sort="${key}"
       aria-label="Сортировать: ${title}" title="Сортировка по возрастанию / убыванию">${title} ${registrySort === key ? (registryDirection === "asc" ? "↑" : "↓") : "↕"}</button>`);
     root.innerHTML = table([...headers, ""],
       data.items.map(({ item, record: r, price: p, manual_price: manual, source_url: url }) => `<tr>
-        <td>${esc(item.id)}</td><td>${esc(item.name)}</td><td>${esc(item.covers.join(", "))}</td><td>${esc(item.vendor)}</td>
-        <td>${r?.exclusion_date ? `Исключено: ${esc(r.exclusion_date)}` : r ? "В реестре" : "—"}</td>
+        <td class="registry-code">${esc(item.id)}</td><td>${sourceLink(url, item.name)}</td><td>${esc(item.covers.join(", "))}</td><td>${esc(item.vendor)}</td>
         <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
           ${r ? `<button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
             data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button>` : ""}</td>
-        <td>${sourceLink(url, "Источник")}</td>
         <td class="row-actions">
           <button class="btn secondary" data-edit data-id="${esc(item.id)}">Изменить</button>
           <button class="btn danger" data-delete data-id="${esc(item.id)}">Удалить</button>
@@ -578,8 +553,11 @@ async function loadAdminProfile() {
     const [user, users] = await Promise.all([SZI.me(), SZI.request("/api/admin/users")]);
     adminProfileForm.elements.login.value = user.login;
     document.getElementById("admin-users").innerHTML = table(
-      ["Логин", "Роль"],
-      users.map(entry => `<tr><td>${esc(entry.login)}</td><td>${entry.role === "admin" ? "Администратор" : "Пользователь"}</td></tr>`),
+      ["Логин", "Роль", ""],
+      users.map(entry => `<tr><td>${esc(entry.login)}</td><td>${entry.role === "admin" ? "Администратор" : "Пользователь"}</td>
+        <td>${entry.id === user.id ? "" : `<button class="btn secondary" type="button"
+          data-user-id="${entry.id}" data-user-role="${esc(entry.role)}"
+          data-user-login="${esc(entry.login)}">Изменить</button>`}</td></tr>`),
     );
   } catch (error) {
     showFlash(document.getElementById("page-profile"), error.message);
@@ -595,13 +573,12 @@ adminProfileForm.addEventListener("submit", async event => {
   const button = event.submitter;
   button.disabled = true;
   try {
-    const user = await SZI.request("/api/admin/profile", {method: "PUT", body: JSON.stringify(values)});
+    await SZI.request("/api/admin/profile", {method: "PUT", body: JSON.stringify(values)});
     adminProfileForm.reset();
     if (values.new_password) {
       window.location.assign("/");
       return;
     }
-    document.getElementById("who").textContent = `${user.login} · администратор`;
     await loadAdminProfile();
     showFlash(document.getElementById("page-profile"), "Профиль сохранён.", true);
   } catch (error) {
@@ -612,9 +589,47 @@ adminProfileForm.addEventListener("submit", async event => {
   }
 });
 
+const adminUserDialog = document.getElementById("admin-user-dialog");
+const adminUserForm = document.getElementById("admin-user-form");
+const adminUserError = document.getElementById("admin-user-error");
+
+document.getElementById("admin-users").addEventListener("click", event => {
+  const button = event.target.closest("[data-user-id]");
+  if (!button) return;
+  adminUserForm.reset();
+  adminUserForm.dataset.userId = button.dataset.userId;
+  adminUserForm.elements.role.value = button.dataset.userRole;
+  document.getElementById("admin-user-title").textContent = `Настройки: ${button.dataset.userLogin}`;
+  adminUserError.textContent = "";
+  adminUserDialog.showModal();
+});
+adminUserDialog.addEventListener("close", () => adminUserForm.reset());
+adminUserForm.addEventListener("submit", async event => {
+  if (event.submitter?.formMethod === "dialog") return;
+  event.preventDefault();
+  const button = event.submitter;
+  const values = Object.fromEntries(new FormData(adminUserForm));
+  values.new_password ||= null;
+  button.disabled = true;
+  adminUserError.textContent = "";
+  try {
+    await SZI.request(`/api/admin/users/${adminUserForm.dataset.userId}`, {
+      method: "PUT",
+      body: JSON.stringify(values),
+    });
+    adminUserDialog.close();
+    await loadAdminProfile();
+    showFlash(document.getElementById("page-profile"), "Настройки пользователя сохранены.", true);
+  } catch (error) {
+    adminUserError.textContent = error.message;
+  } finally {
+    adminUserForm.elements.current_password.value = "";
+    button.disabled = false;
+  }
+});
+
 (async () => {
   const user = await SZI.requireAdmin();
   if (!user) return;
-  document.getElementById("who").textContent = `${user.login} · администратор`;
   showPage("dashboard");
 })();

@@ -247,7 +247,7 @@ th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transfor
 .sort-column:focus-visible { outline: 2px solid var(--accent, #15344c); outline-offset: 3px; }
 #registry-table { overflow-x: auto; }
 #registry-table td { overflow-wrap: anywhere; }
-#registry-table td:nth-child(6) { white-space: nowrap; }
+#registry-table td:nth-child(5) { white-space: nowrap; }
 #registry-table[aria-busy="true"] { opacity: .65; }
 button:disabled { cursor: wait; opacity: .55; }
 
@@ -269,9 +269,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .registry-actions { gap: 12px; }
 .registry-actions #price-progress { flex-basis: 100%; }
 
-#registry-table table { min-width: 850px; }
+#registry-table table { min-width: 740px; }
 #registry-table td:nth-child(2) { min-width: 165px; }
-#registry-table td:nth-child(4) { min-width: 145px; }
+#registry-table td:nth-child(4) { min-width: 125px; }
 
 .registry-edit-price {
   border: 0;
@@ -310,3 +310,15 @@ button:disabled { cursor: wait; opacity: .55; }
 @media (max-width: 860px) {
   .side { z-index: 2; height: auto; max-height: 45dvh; }
 }
+
+#registry-table .registry-code { min-width: 110px; overflow-wrap: normal; }
+#registry-table .row-actions { min-width: 164px; white-space: nowrap; }
+#registry-table .row-actions .btn {
+  flex: none;
+  padding: 7px 9px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+#admin-user-dialog { width: min(440px, calc(100% - 32px)); }
+#admin-user-form > .toolbar { margin-top: 16px; }
+#page-export a.btn { text-decoration: none; }

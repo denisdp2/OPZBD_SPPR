@@ -309,3 +309,15 @@ def test_tools_join_registry_and_preserve_standalone_items(client):
     assert rows[0]["price"]["value"] == 30
     assert client.delete("/api/admin/items/ru-software-1").status_code == 200
     assert client.get("/api/admin/registry").json()["total"] == 0
+
+
+def test_export_can_download_individual_catalogs(client):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    for kind in ("tool", "org"):
+        item = {"id": kind, "name": kind, "kind": kind}
+        assert client.put(f"/api/admin/items/{kind}", json=item).status_code == 200
+    for part, kind in (("tools", "tool"), ("org", "org")):
+        result = client.get(f"/api/admin/export?part={part}&download=true")
+        assert result.headers["content-disposition"] == f'attachment; filename="szi-{part}.json"'
+        assert [item["kind"] for item in result.json()["items"]] == [kind]
+    assert client.get("/api/admin/export?part=requirements").json()["items"] == []

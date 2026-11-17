@@ -33,7 +33,14 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app import __version__, paths
 from app.auth.deps import COOKIE_NAME, current_user, require_admin, require_login
-from app.auth.schemas import AdminProfileUpdate, AuthUser, LoginRequest, RegisterRequest, UserDraft
+from app.auth.schemas import (
+    AdminProfileUpdate,
+    AdminUserUpdate,
+    AuthUser,
+    LoginRequest,
+    RegisterRequest,
+    UserDraft,
+)
 from app.auth.store import AuthStore, User
 from app.core.interfaces import NotFoundError, Repository
 from app.core.models import (
@@ -370,6 +377,21 @@ def create_app(
             AuthUser(id=user.id, login=user.login, role=user.role) for user in auth.list_users()
         ]
 
+    @admin.put("/users/{user_id}")
+    def update_user(
+        user_id: int, body: AdminUserUpdate, user: User = Depends(require_admin)
+    ) -> AuthUser:
+        if user_id == user.id:
+            raise HTTPException(status_code=409, detail="Для своего аккаунта используйте профиль")
+        result = auth.update_user(
+            user.id, user_id, body.current_password, body.role, body.new_password
+        )
+        if result is False:
+            raise HTTPException(status_code=403, detail="Неверный пароль администратора")
+        if result is None:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        return AuthUser(id=result.id, login=result.login, role=result.role)
+
     @admin.put("/profile")
     def update_profile(body: AdminProfileUpdate, user: User = Depends(require_admin)) -> AuthUser:
         try:
@@ -393,6 +415,8 @@ def create_app(
         ] = "id",
         direction: Literal["asc", "desc"] = "asc",
     ) -> dict:
+        if isinstance(repo, SQLiteRepository) and repo.path == registry.store.path:
+            return registry.store.tools_page(q, state, sort, direction == "desc", offset, limit)
         records = {
             f"ru-software-{row['record']['reg_number']}": row
             for row in registry.store.query(state="all")
@@ -515,7 +539,18 @@ def create_app(
         return registry.status()
 
     @admin.get("/export")
-    def export() -> DataBundle:
+    def export(
+        response: Response,
+        part: Literal["all", "requirements", "tools", "org"] = "all",
+        download: bool = False,
+    ) -> DataBundle:
+        if download:
+            filename = "szi-bundle.json" if part == "all" else f"szi-{part}.json"
+            response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        if part == "requirements":
+            return DataBundle(requirements=repo.list_requirements())
+        if part in {"tools", "org"}:
+            return DataBundle(items=repo.list_items(kind="tool" if part == "tools" else "org"))
         return repo.export_bundle()
 
     app.include_router(api)

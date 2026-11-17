@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Администратор — СППР</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=admin-tools-1">
+  <link rel="stylesheet" href="/static/css/app.css?v=admin-tools-2">
 </head>
 <body>
   <div class="layout">
@@ -12,7 +12,6 @@
       <div>
         <div class="brand-name">СППР</div>
       </div>
-      <div class="who" id="who"></div>
       <nav>
         <button type="button" data-page="dashboard" class="active">Обзор</button>
         <button type="button" data-page="requirements">Требования</button>
@@ -150,15 +149,16 @@
       <section id="page-export" class="hidden">
         <div class="top">
           <div>
-            <p class="eyebrow">База целиком</p>
             <h1>Экспорт справочников</h1>
-            <p class="lead">Выгрузка требований, элементов защиты и профилей в JSON.</p>
+            <p class="lead">Полная выгрузка включает требования, средства, организационные меры и профили. Каждый справочник можно скачать отдельно в JSON.</p>
           </div>
         </div>
         <div class="card toolbar">
-          <button class="btn" type="button" id="export-btn">Скачать JSON</button>
+          <a class="btn" href="/api/admin/export?download=true">Скачать все справочники</a>
+          <a class="btn secondary" href="/api/admin/export?part=requirements&amp;download=true">Требования</a>
+          <a class="btn secondary" href="/api/admin/export?part=tools&amp;download=true">Средства</a>
+          <a class="btn secondary" href="/api/admin/export?part=org&amp;download=true">Меры</a>
         </div>
-        <pre id="export-preview" class="card hidden"></pre>
       </section>
       <section id="page-profile" class="hidden">
         <div class="top"><h1>Профиль администратора</h1></div>
@@ -173,10 +173,29 @@
         </form>
         <h2>Пользователи</h2>
         <div id="admin-users"></div>
+        <dialog id="admin-user-dialog">
+          <form id="admin-user-form">
+            <h2 id="admin-user-title">Настройки пользователя</h2>
+            <label for="admin-user-role">Роль</label>
+            <select id="admin-user-role" name="role">
+              <option value="user">Пользователь</option>
+              <option value="admin">Администратор</option>
+            </select>
+            <label for="admin-user-new-password">Новый пароль пользователя</label>
+            <input id="admin-user-new-password" name="new_password" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Оставьте пустым, чтобы сохранить пароль">
+            <label for="admin-user-current-password">Ваш пароль администратора</label>
+            <input id="admin-user-current-password" name="current_password" type="password" autocomplete="current-password" required maxlength="128">
+            <div class="toolbar">
+              <button class="btn" type="submit">Сохранить</button>
+              <button class="btn secondary" type="submit" formmethod="dialog" formnovalidate>Отмена</button>
+            </div>
+            <div id="admin-user-error" role="status"></div>
+          </form>
+        </dialog>
       </section>
     </main>
   </div>
   <script src="/static/js/api.js"></script>
-  <script src="/static/js/admin.js?v=admin-tools-1"></script>
+  <script src="/static/js/admin.js?v=admin-tools-2"></script>
 </body>
 </html>

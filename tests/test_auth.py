@@ -113,3 +113,24 @@ def test_admin_profile_updates_login_and_revokes_sessions_on_password_change(cli
         "local-admin",
         "user",
     }
+
+
+def test_admin_can_update_another_users_role_and_password(client):
+    client.post("/api/auth/login", json={"login": "user", "password": "user"})
+    user_id = client.get("/api/auth/me").json()["id"]
+    route = f"/api/admin/users/{user_id}"
+    update = {"role": "admin", "current_password": "admin", "new_password": "new-test-pass"}
+    assert client.put(route, json=update).status_code == 403
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    assert client.put(route, json={**update, "current_password": "wrong"}).status_code == 403
+    assert client.put(route, json=update).json()["role"] == "admin"
+    assert (
+        client.post("/api/auth/login", json={"login": "user", "password": "user"}).status_code
+        == 401
+    )
+    assert (
+        client.post("/api/auth/login", json={"login": "user", "password": "new-test-pass"}).json()[
+            "role"
+        ]
+        == "admin"
+    )
