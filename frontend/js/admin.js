@@ -492,8 +492,10 @@ async function pollPrices() {
   try {
     const job = await SZI.request("/api/admin/registry/prices/status");
     const running = ["running", "stopping"].includes(job.status);
-    document.getElementById("collect-prices").disabled = running;
-    document.getElementById("stop-prices").disabled = job.status !== "running";
+    const collectButton = document.getElementById("collect-prices");
+    const stopButton = document.getElementById("stop-prices");
+    if (collectButton) collectButton.disabled = running;
+    if (stopButton) stopButton.disabled = job.status !== "running";
     document.getElementById("price-progress").textContent = job.status === "idle" ? "" :
       `${({running: "Обработка", stopping: "Остановка", stopped: "Остановлено", failed: "Сбой", completed: "Завершено"})[job.status]}: ${job.done}/${job.total}, ошибок: ${job.errors}. ${job.message || ""}`;
     if (running) priceTimer = setTimeout(pollPrices, 2000);
@@ -510,7 +512,7 @@ document.getElementById("collect-prices").addEventListener("click", async event 
   }
   await pollPrices();
 });
-document.getElementById("stop-prices").addEventListener("click", async event => {
+document.getElementById("stop-prices")?.addEventListener("click", async event => {
   event.currentTarget.disabled = true;
   try {
     await SZI.request("/api/admin/registry/prices/stop", {method: "POST"});

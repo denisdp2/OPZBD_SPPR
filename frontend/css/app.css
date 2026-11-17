@@ -195,6 +195,25 @@ th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transfor
 
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
 
+.registry-actions {
+  align-items: center;
+}
+
+.registry-actions > .btn {
+  width: 13rem;
+  max-width: 100%;
+  height: 44px;
+  margin: 0;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.registry-actions > .btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .upload-bar {
   align-items: center;
   margin-bottom: 16px;
