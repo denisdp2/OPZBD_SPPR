@@ -37,11 +37,11 @@ let registryVisit = 0;
 let showPriceResult = false;
 
 function showPage(id) {
-  if (activePage === "registry" && id !== "registry") {
+  if (activePage === "tools" && id !== "tools") {
     registryVisit++;
     showPriceResult = false;
     clearTimeout(priceTimer);
-    const registryPage = document.getElementById("page-registry");
+    const registryPage = document.getElementById("page-tools");
     registryPage.querySelector(".flash")?.remove();
     registryPage.querySelectorAll('[role="status"]:not(#registry-count)').forEach((status) => {
       status.textContent = "";
@@ -52,10 +52,10 @@ function showPage(id) {
   navButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.page === id));
   if (id === "dashboard") loadDashboard();
   if (id === "requirements") loadRequirements();
-  if (id === "tools") loadTools();
   if (id === "org") loadOrg();
   if (id === "gaps") loadGaps();
-  if (id === "registry") { loadRegistry(); pollPrices(); }
+  if (id === "tools") { loadRegistry(); pollPrices(); }
+  if (id === "profile") loadAdminProfile();
 }
 
 async function loadList(path) {
@@ -90,25 +90,35 @@ async function loadDashboard() {
   }
 }
 
-function bindCrud({ tableId, formId, listPath, itemPath, columns, formHtml, toPayload, toRow, filter }) {
+function bindCrud({ tableId, formId, listPath, itemPath, columns = [], fields = [], formHtml, toPayload, toRow, filter, refreshTable }) {
   const tableRoot = document.getElementById(tableId);
   const formRoot = document.getElementById(formId);
   let cached = [];
   let offset = 0;
   let query = "";
+  let sortIndex = 0;
+  let sortAscending = true;
+  const collator = new Intl.Collator("ru", {numeric: true});
 
   async function refresh(reload = true) {
+    if (refreshTable) return refreshTable();
     try {
       if (reload) cached = await loadList(listPath);
       let items = filter ? cached.filter(filter) : cached;
       if (query) items = items.filter(item =>
         [item.id, item.name, item.title, item.vendor].join(" ").toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+      const field = fields[sortIndex];
+      if (field) items = [...items].sort((a, b) =>
+        (sortAscending ? 1 : -1) * collator.compare(String(a[field] ?? ""), String(b[field] ?? "")));
+      const headers = columns.map((label, index) => label
+        ? `<button class="sort-column" type="button" data-catalog-sort="${index}">${label} ${index === sortIndex ? (sortAscending ? "↑" : "↓") : "↕"}</button>`
+        : "");
       if (offset >= items.length) offset = Math.max(0, Math.floor((items.length - 1) / 50) * 50);
       tableRoot.innerHTML = `<form data-catalog-search class="card toolbar">
           <label for="${tableId}-query">Поиск по коду или названию</label>
           <input id="${tableId}-query" name="q" type="search" value="${esc(query)}">
           <button class="btn secondary" type="submit">Найти</button></form>` + table(
-        columns, items.slice(offset, offset + 50).map((item) => toRow(item)),
+        headers, items.slice(offset, offset + 50).map((item) => toRow(item)),
       ) + `<div class="toolbar"><button class="btn secondary" data-prev ${offset === 0 ? "disabled" : ""}>Назад</button>
         <span>${items.length ? `${offset + 1}–${Math.min(offset + 50, items.length)} из ${items.length}` : "Нет записей"}</span>
         <button class="btn secondary" data-next ${offset + 50 >= items.length ? "disabled" : ""}>Далее</button></div>`;
@@ -120,6 +130,7 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns, formHtml, toPa
   function openForm(values = {}) {
     formRoot.classList.remove("hidden");
     formRoot.innerHTML = formHtml(values);
+    formRoot.scrollIntoView({block: "nearest"});
     formRoot.querySelector("form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const data = toPayload(new FormData(event.target));
@@ -142,6 +153,14 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns, formHtml, toPa
   tableRoot.addEventListener("click", async (event) => {
     const btn = event.target.closest("button");
     if (!btn) return;
+    if (btn.hasAttribute("data-catalog-sort")) {
+      const index = Number(btn.dataset.catalogSort);
+      sortAscending = index !== sortIndex || !sortAscending;
+      sortIndex = index;
+      offset = 0;
+      await refresh(false);
+      return;
+    }
     if (btn.hasAttribute("data-prev")) { offset = Math.max(0, offset - 50); await refresh(false); return; }
     if (btn.hasAttribute("data-next")) { offset += 50; await refresh(false); return; }
     const id = btn.dataset.id;
@@ -180,6 +199,7 @@ const requirementsUi = bindCrud({
   listPath: "/api/requirements",
   itemPath: (id) => `/api/admin/requirements/${encodeURIComponent(id)}`,
   columns: ["Код", "Группа", "Название", "Источник", ""],
+  fields: ["id", "group", "title", "source"],
   formHtml: (v) => `
     <form>
       <div class="form-grid">
@@ -256,15 +276,12 @@ function itemRow(item) {
 }
 
 const toolsUi = bindCrud({
-  tableId: "tool-table",
+  tableId: "registry-table",
   formId: "tool-form",
-  listPath: "/api/items",
   itemPath: (id) => `/api/admin/items/${encodeURIComponent(id)}`,
-  columns: ["Код", "Название", "Закрывает", ""],
-  filter: (item) => item.kind !== "org",
   formHtml: itemFormHtml,
   toPayload: itemPayload,
-  toRow: itemRow,
+  refreshTable: loadRegistry,
 });
 
 const orgUi = bindCrud({
@@ -273,6 +290,7 @@ const orgUi = bindCrud({
   listPath: "/api/items",
   itemPath: (id) => `/api/admin/items/${encodeURIComponent(id)}`,
   columns: ["Код", "Название", "Закрывает", ""],
+  fields: ["id", "name", "covers"],
   filter: (item) => item.kind === "org",
   formHtml: itemFormHtml,
   toPayload: itemPayload,
@@ -281,9 +299,6 @@ const orgUi = bindCrud({
 
 async function loadRequirements() {
   await requirementsUi.refresh();
-}
-async function loadTools() {
-  await toolsUi.refresh();
 }
 async function loadOrg() {
   await orgUi.refresh();
@@ -329,8 +344,7 @@ document.querySelectorAll("[data-upload]").forEach((input) => {
         status.textContent = `Загружено: ${report.imported}. Ошибок: ${report.errors.length}.`;
         if (report.errors.length) status.textContent += " " + report.errors.slice(0, 3).join("; ");
       }
-      if (input.dataset.upload === "registry") await loadRegistry();
-      if (input.dataset.upload === "tools") await loadTools();
+      if (input.dataset.upload === "registry") { registryOffset = 0; await loadRegistry(); }
       if (input.dataset.upload === "org") await loadOrg();
       if (input.dataset.upload === "requirements") await loadRequirements();
     } catch (err) {
@@ -375,7 +389,7 @@ let registryOffset = 0;
 let registryQuery = "";
 let priceTimer;
 let registryState = "active";
-let registrySort = "reg_number";
+let registrySort = "id";
 let registryDirection = "asc";
 let registryRequest = 0;
 
@@ -400,20 +414,28 @@ async function loadRegistry() {
     params.set("offset", registryOffset);
     params.set("limit", 50);
     root.setAttribute("aria-busy", "true");
-    const data = await SZI.request(`/api/admin/registry?${params}`);
+    const data = await SZI.request(`/api/admin/tools?${params}`);
     if (request !== registryRequest) return;
-    const columns = [["reg_number", "Номер"], ["name", "ПО"], ["owner", "Правообладатель"],
+    if (registryOffset && registryOffset >= data.total) {
+      registryOffset = Math.max(0, Math.floor((data.total - 1) / 50) * 50);
+      return loadRegistry();
+    }
+    const columns = [["id", "Код"], ["name", "Название"], ["covers", "Закрывает"], ["owner", "Правообладатель"],
       ["status", "Статус"], ["value", "Стоимость, руб."], ["source", "Источник"]];
     const headers = columns.map(([key, title]) => `<button type="button" class="sort-column" data-sort="${key}"
       aria-label="Сортировать: ${title}" title="Сортировка по возрастанию / убыванию">${title} ${registrySort === key ? (registryDirection === "asc" ? "↑" : "↓") : "↕"}</button>`);
-    root.innerHTML = table(headers,
-      data.items.map(({ record: r, price: p, manual_price: manual, source_url: url }) => `<tr>
-        <td>${esc(r.reg_number)}</td><td>${esc(r.name)}</td><td>${esc(r.owner)}</td>
-        <td>${r.exclusion_date ? `Исключено: ${esc(r.exclusion_date)}` : "В реестре"}</td>
+    root.innerHTML = table([...headers, ""],
+      data.items.map(({ item, record: r, price: p, manual_price: manual, source_url: url }) => `<tr>
+        <td>${esc(item.id)}</td><td>${esc(item.name)}</td><td>${esc(item.covers.join(", "))}</td><td>${esc(item.vendor)}</td>
+        <td>${r?.exclusion_date ? `Исключено: ${esc(r.exclusion_date)}` : r ? "В реестре" : "—"}</td>
         <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
-          <button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
-            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(r.name)}"><span aria-hidden="true">✎</span></button></td>
-        <td>${sourceLink(url, "Источник")}</td></tr>`));
+          ${r ? `<button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
+            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button>` : ""}</td>
+        <td>${sourceLink(url, "Источник")}</td>
+        <td class="row-actions">
+          <button class="btn secondary" data-edit data-id="${esc(item.id)}">Изменить</button>
+          <button class="btn danger" data-delete data-id="${esc(item.id)}">Удалить</button>
+        </td></tr>`));
     root.removeAttribute("aria-busy");
     document.getElementById("registry-count").textContent = data.total ? `${registryOffset + 1}–${Math.min(registryOffset + 50, data.total)} из ${data.total}` : "Реестр пока пуст";
     document.getElementById("registry-prev").disabled = registryOffset === 0;
@@ -505,7 +527,7 @@ document.getElementById("registry-prev").addEventListener("click", () => { regis
 document.getElementById("registry-next").addEventListener("click", () => { registryOffset += 50; loadRegistry(); });
 
 async function pollPrices() {
-  if (activePage !== "registry") return;
+  if (activePage !== "tools") return;
   const visit = registryVisit;
   clearTimeout(priceTimer);
   try {
@@ -533,9 +555,9 @@ document.getElementById("collect-prices").addEventListener("click", async event 
   try {
     await SZI.request("/api/admin/registry/prices", {method: "POST"});
   } catch (error) {
-    if (visit === registryVisit) showFlash(document.getElementById("page-registry"), error.message);
+    if (visit === registryVisit) showFlash(document.getElementById("page-tools"), error.message);
   }
-  if (activePage === "registry") await pollPrices();
+  if (activePage === "tools") await pollPrices();
 });
 document.getElementById("stop-prices")?.addEventListener("click", async event => {
   const visit = registryVisit;
@@ -544,9 +566,50 @@ document.getElementById("stop-prices")?.addEventListener("click", async event =>
   try {
     await SZI.request("/api/admin/registry/prices/stop", {method: "POST"});
   } catch (error) {
-    if (visit === registryVisit) showFlash(document.getElementById("page-registry"), error.message);
+    if (visit === registryVisit) showFlash(document.getElementById("page-tools"), error.message);
   }
-  if (activePage === "registry") await pollPrices();
+  if (activePage === "tools") await pollPrices();
+});
+
+const adminProfileForm = document.getElementById("admin-profile-form");
+
+async function loadAdminProfile() {
+  try {
+    const [user, users] = await Promise.all([SZI.me(), SZI.request("/api/admin/users")]);
+    adminProfileForm.elements.login.value = user.login;
+    document.getElementById("admin-users").innerHTML = table(
+      ["Логин", "Роль"],
+      users.map(entry => `<tr><td>${esc(entry.login)}</td><td>${entry.role === "admin" ? "Администратор" : "Пользователь"}</td></tr>`),
+    );
+  } catch (error) {
+    showFlash(document.getElementById("page-profile"), error.message);
+  }
+}
+
+document.getElementById("admin-profile").addEventListener("click", () => showPage("profile"));
+adminProfileForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(adminProfileForm));
+  values.login = values.login.trim();
+  values.new_password ||= null;
+  const button = event.submitter;
+  button.disabled = true;
+  try {
+    const user = await SZI.request("/api/admin/profile", {method: "PUT", body: JSON.stringify(values)});
+    adminProfileForm.reset();
+    if (values.new_password) {
+      window.location.assign("/");
+      return;
+    }
+    document.getElementById("who").textContent = `${user.login} · администратор`;
+    await loadAdminProfile();
+    showFlash(document.getElementById("page-profile"), "Профиль сохранён.", true);
+  } catch (error) {
+    showFlash(document.getElementById("page-profile"), error.message);
+  } finally {
+    adminProfileForm.elements.current_password.value = "";
+    button.disabled = false;
+  }
 });
 
 (async () => {

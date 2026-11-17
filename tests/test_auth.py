@@ -85,3 +85,31 @@ def test_registration_and_draft_survive_restart(client):
         assert restarted.put(path, json=draft).status_code == 403
         assert restarted.post("/api/auth/login", json=credentials).status_code == 200
         assert restarted.get(path).json() == draft
+
+
+def test_admin_profile_updates_login_and_revokes_sessions_on_password_change(client):
+    endpoint = "/api/admin/profile"
+    body = {"login": "local-admin", "current_password": "admin", "new_password": "test-pass-27"}
+    assert client.put(endpoint, json=body).status_code == 401
+    client.post("/api/auth/login", json={"login": "user", "password": "user"})
+    assert client.get("/api/admin/users").status_code == 403
+    assert client.put(endpoint, json=body).status_code == 403
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    assert client.put(endpoint, json={**body, "current_password": "bad"}).status_code == 403
+    assert client.put(endpoint, json={**body, "login": "user"}).status_code == 409
+    assert client.put(endpoint, json=body).json()["login"] == "local-admin"
+    assert client.get("/api/auth/me").status_code == 401
+    assert (
+        client.post("/api/auth/login", json={"login": "admin", "password": "admin"}).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/auth/login", json={"login": "local-admin", "password": "test-pass-27"}
+        ).status_code
+        == 200
+    )
+    assert {user["login"] for user in client.get("/api/admin/users").json()} == {
+        "local-admin",
+        "user",
+    }

@@ -30,6 +30,10 @@ class RegistryStore:
             )
             return cursor.rowcount > 0
 
+    def delete_record(self, number: int) -> None:
+        with closing(sqlite3.connect(self.path)) as con, con:
+            con.execute("DELETE FROM registry WHERE reg_number=?", (number,))
+
     def upsert(self, records: list[RegistryRecord]) -> None:
         with closing(sqlite3.connect(self.path)) as con, con:
             for record in records:

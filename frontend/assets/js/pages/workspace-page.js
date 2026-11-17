@@ -244,20 +244,10 @@ function setLoading(button, loading, idleText) {
 }
 
 function renderApiState() {
-  const apiStatus = $("#api-status");
   const notice = $("#data-notice");
   const noticeText = $("#data-notice-text");
   const footerState = $("#footer-data-state");
   const hasCatalogGap = state.catalogsEmpty;
-  if (apiStatus) {
-    apiStatus.classList.toggle("is-online", state.serverOnline && !state.usingExamples);
-    apiStatus.classList.toggle("is-demo", state.usingExamples || hasCatalogGap);
-    const label = apiStatus.querySelector("span:last-child");
-    if (label) label.textContent = state.usingExamples
-      ? "Примерные данные"
-      : hasCatalogGap ? "Справочники не заполнены" : "Данные с сервера";
-    apiStatus.title = state.problems.join("; ") || (state.serverOnline ? "API доступно" : "Нет соединения с API");
-  }
   if (notice) {
     notice.hidden = !state.usingExamples && !hasCatalogGap;
     if (noticeText) {
@@ -1056,9 +1046,15 @@ async function loadPageData(draft = null) {
 async function initialize() {
   const account = await apiRequest("/auth/me");
   const path = "/users/" + account.id + "/draft";
-  const draft = await apiRequest(path);
+  let draft = null;
+  try {
+    draft = await apiRequest(path);
+    draftPath = path;
+  } catch (error) {
+    if (error.status === 401) throw error;
+    showToast("Не удалось загрузить черновик. Сохранение временно недоступно.", "error");
+  }
   await loadPageData(draft);
-  draftPath = path;
   $("#logout-button .profile-copy strong").textContent = account.login;
   bindEvents();
   updateModeVisibility();
@@ -1069,8 +1065,6 @@ initialize().catch((error) => {
     window.location.replace("/");
     return;
   }
-  state.usingExamples = true;
-  state.problems = [error?.message || "Не удалось загрузить справочники"];
-  renderApiState();
-  showToast("Не удалось загрузить данные. Проверьте соединение с приложением.", "error");
+  $("#data-notice-text").textContent = error?.message || "Не удалось загрузить справочники.";
+  $("#data-notice").hidden = false;
 });

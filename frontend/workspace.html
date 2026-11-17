@@ -7,7 +7,7 @@
   <meta name="description" content="Подбор средств и организационных мер защиты информации">
   <title>Сценарий и состав — СППР</title>
   <link rel="stylesheet" href="/static/assets/css/workspace.css">
-  <script type="module" src="/static/assets/js/pages/workspace-page.js"></script>
+  <script type="module" src="/static/assets/js/pages/workspace-page.js?v=admin-tools-1"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -40,12 +40,6 @@
       </nav>
 
       <div class="sidebar-bottom">
-        <div class="sidebar-help">
-          <span class="help-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M9.5 9a2.6 2.6 0 1 1 4.5 1.8c-1.2 1-2 1.3-2 2.7M12 17h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
-          <strong>Как начать</strong>
-          <p>Выберите профиль, оставьте нужные требования и добавьте позиции, которые можно рассматривать в расчёте.</p>
-          <button type="button" class="text-button" data-page="builder">К сценарию <span aria-hidden="true">→</span></button>
-        </div>
         <button class="profile-button" type="button" id="logout-button" title="Выйти из аккаунта">
           <span class="avatar">П</span><span class="profile-copy"><strong>Пользователь</strong><small>Локальный аккаунт</small></span>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 17 15 12 10 7M15 12H4M20 4v16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -58,7 +52,6 @@
         <button type="button" class="mobile-menu" id="mobile-menu" aria-label="Открыть меню"><svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
         <div class="breadcrumb"><span>Расчёт</span><span class="breadcrumb-sep">/</span><strong id="breadcrumb-current">Сценарий и состав</strong></div>
         <div class="topbar-actions">
-          <span class="api-status" id="api-status"><span class="status-dot"></span><span>Проверка соединения</span></span>
           <button type="button" class="icon-button" id="refresh-data" aria-label="Обновить справочники" title="Обновить справочники"><svg viewBox="0 0 24 24" fill="none"><path d="M20 7v5h-5M4 17v-5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 9a7 7 0 0 1 12-2L20 12M4 12l2.5 5a7 7 0 0 0 12-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
       </header>
@@ -108,17 +101,10 @@
             <div class="heading-meta"><span class="soft-badge"><span class="status-dot status-dot-blue"></span><span id="builder-item-count">0 позиций-кандидатов</span></span></div>
           </div>
 
-          <div class="workflow-strip" aria-label="Этапы принятия решения">
-            <div class="workflow-step is-current"><span class="workflow-number">1</span><span><strong>Сценарий</strong><small>Профиль и требования</small></span></div>
-            <span class="workflow-connector"></span>
-            <div class="workflow-step"><span class="workflow-number">2</span><span><strong>Состав</strong><small>Средства и оргмеры</small></span></div>
-            <span class="workflow-connector"></span>
-            <div class="workflow-step"><span class="workflow-number">3</span><span><strong>Расчёт</strong><small>Оценка или оптимизация</small></span></div>
-          </div>
 
           <div class="builder-layout">
             <aside class="panel scenario-panel">
-              <div class="panel-heading"><div><h2>Параметры сценария</h2><p>От чего зависит оценка</p></div><span class="heading-symbol"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5h16M4 12h16M4 18.5h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span></div>
+              <div class="panel-heading"><div><h2>Параметры сценария</h2><p>От чего зависит оценка</p></div></div>
               <label class="control-label" for="profile-select">Профиль обязательности</label>
               <select id="profile-select" class="select-control"></select>
               <p class="control-help" id="profile-description">Профиль определяет обязательные требования в этом сценарии. Они остаются включёнными.</p>

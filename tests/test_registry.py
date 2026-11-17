@@ -282,3 +282,30 @@ def test_official_download_uses_last_successful_copy(client, monkeypatch):
     cached = client.get(url)
     assert cached.content == b"<registry/>"
     assert cached.headers["X-Registry-Source"] == "cache"
+
+
+def test_tools_join_registry_and_preserve_standalone_items(client):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    xml = (
+        b"<registry><item><registrationNumber>1</registrationNumber>"
+        b"<name>Z</name></item></registry>"
+    )
+    assert (
+        client.post(
+            "/api/admin/import/ru-software", files={"file": ("registry.xml", xml)}
+        ).status_code
+        == 200
+    )
+    for item in [
+        {"id": "ru-software-1", "name": "Z", "kind": "tool", "covers": ["REQ-1"]},
+        {"id": "standalone", "name": "A", "kind": "tool"},
+        {"id": "org", "name": "Org", "kind": "org"},
+    ]:
+        assert client.put(f"/api/admin/items/{item['id']}", json=item).status_code == 200
+    assert client.put("/api/admin/registry/1/price", json={"value": 30}).status_code == 204
+    rows = client.get("/api/admin/tools?sort=name&direction=desc").json()["items"]
+    assert [row["item"]["name"] for row in rows] == ["Z", "A"]
+    assert rows[0]["item"]["covers"] == ["REQ-1"]
+    assert rows[0]["price"]["value"] == 30
+    assert client.delete("/api/admin/items/ru-software-1").status_code == 200
+    assert client.get("/api/admin/registry").json()["total"] == 0

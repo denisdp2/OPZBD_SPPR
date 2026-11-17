@@ -71,6 +71,31 @@ class AuthStore:
             ).fetchone()
         return User(id=row["id"], login=login, role="user") if row else None
 
+    def list_users(self) -> list[User]:
+        with self._db() as con:
+            return [
+                User(id=row["id"], login=row["login"], role=row["role"])
+                for row in con.execute("SELECT id, login, role FROM users ORDER BY login")
+            ]
+
+    def update_profile(
+        self, user: User, login: str, current_password: str, new_password: str | None
+    ) -> bool:
+        with self._db() as con:
+            row = con.execute(
+                "SELECT password_hash FROM users WHERE id = ?", (user.id,)
+            ).fetchone()
+            if row is None or not verify_password(current_password, row["password_hash"]):
+                return False
+            password_hash = hash_password(new_password) if new_password else row["password_hash"]
+            updated = con.execute(
+                "UPDATE users SET login = ?, password_hash = ? WHERE id = ? AND password_hash = ?",
+                (login, password_hash, user.id, row["password_hash"]),
+            )
+            if updated.rowcount and new_password:
+                con.execute("DELETE FROM sessions WHERE user_id = ?", (user.id,))
+            return updated.rowcount > 0
+
     def read_draft(self, user_id: int) -> str | None:
         with self._db() as con:
             row = con.execute("SELECT data FROM drafts WHERE user_id = ?", (user_id,)).fetchone()

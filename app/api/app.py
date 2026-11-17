@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import json
 import sqlite3
 import threading
 from collections.abc import Callable
@@ -32,7 +33,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app import __version__, paths
 from app.auth.deps import COOKIE_NAME, current_user, require_admin, require_login
-from app.auth.schemas import AuthUser, LoginRequest, RegisterRequest, UserDraft
+from app.auth.schemas import AdminProfileUpdate, AuthUser, LoginRequest, RegisterRequest, UserDraft
 from app.auth.store import AuthStore, User
 from app.core.interfaces import NotFoundError, Repository
 from app.core.models import (
@@ -285,6 +286,10 @@ def create_app(
     @admin.delete("/items/{item_id}")
     def delete_item(item_id: str) -> dict:
         repo.delete_item(item_id)
+        number = item_id.removeprefix("ru-software-")
+        if number.isascii() and number.isdecimal() and item_id == f"ru-software-{number}":
+            if len(number) <= 18:
+                registry.store.delete_record(int(number))
         return {"status": "ok"}
 
     @admin.get("/profiles/{profile_id}")
@@ -339,6 +344,15 @@ def create_app(
                                 detail="Файл превышает лимит размера выгрузки",
                             )
                         output.write(chunk)
+                if importer_name == "ru-software" and suffix == ".json":
+                    payload = json.loads(target.read_text(encoding="utf-8-sig"))
+                    if (
+                        isinstance(payload, dict)
+                        and "items" in payload
+                        and "records" not in payload
+                    ):
+                        bundle = DataBundle.model_validate(payload)
+                        return ImportReport(importer="bundle", imported=repo.import_bundle(bundle))
                 if importer_name in {"ru-software", "ru-software-sqlite"}:
                     return registry.import_file(target)
                 bundle = DataBundle.model_validate_json(target.read_bytes())
@@ -349,6 +363,70 @@ def create_app(
             raise HTTPException(status_code=422, detail="Не удалось прочитать выгрузку") from exc
         finally:
             file.file.close()
+
+    @admin.get("/users")
+    def users() -> list[AuthUser]:
+        return [
+            AuthUser(id=user.id, login=user.login, role=user.role) for user in auth.list_users()
+        ]
+
+    @admin.put("/profile")
+    def update_profile(body: AdminProfileUpdate, user: User = Depends(require_admin)) -> AuthUser:
+        try:
+            applied = auth.update_profile(
+                user, body.login, body.current_password, body.new_password
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="Этот логин уже занят") from exc
+        if not applied:
+            raise HTTPException(status_code=403, detail="Неверный текущий пароль")
+        return AuthUser(id=user.id, login=body.login, role=user.role)
+
+    @admin.get("/tools")
+    def list_tools(
+        q: str = "",
+        offset: int = Query(0, ge=0),
+        limit: int = Query(50, ge=1, le=200),
+        state: Literal["active", "excluded"] = "active",
+        sort: Literal[
+            "reg_number", "id", "name", "covers", "owner", "status", "value", "source"
+        ] = "id",
+        direction: Literal["asc", "desc"] = "asc",
+    ) -> dict:
+        records = {
+            f"ru-software-{row['record']['reg_number']}": row
+            for row in registry.store.query(state="all")
+        }
+        rows = []
+        query = q.strip().casefold()
+        for item in repo.list_items(kind="tool"):
+            row = records.get(item.id, {})
+            record = row.get("record")
+            excluded = bool(record and record["exclusion_date"])
+            if excluded != (state == "excluded"):
+                continue
+            if query and query not in f"{item.id} {item.name} {item.vendor}".casefold():
+                continue
+            rows.append({**row, "item": item})
+
+        def sort_key(row):
+            item, record = row["item"], row.get("record") or {}
+            price = row.get("price") or {}
+            return {
+                "reg_number": record.get("reg_number"),
+                "id": item.id.casefold(),
+                "name": item.name.casefold(),
+                "covers": ", ".join(item.covers).casefold(),
+                "owner": item.vendor.casefold(),
+                "status": record.get("exclusion_date", ""),
+                "value": price.get("value") if price.get("status") in {"ok", "free"} else None,
+                "source": row.get("source_url") or "",
+            }[sort]
+
+        known = [row for row in rows if sort_key(row) is not None]
+        unknown = [row for row in rows if sort_key(row) is None]
+        rows = sorted(known, key=sort_key, reverse=direction == "desc") + unknown
+        return {"total": len(rows), "items": rows[offset : offset + limit]}
 
     @admin.get("/registry")
     def list_registry(

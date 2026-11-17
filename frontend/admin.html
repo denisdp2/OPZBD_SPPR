@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Администратор — СППР</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=registry-controls-3">
+  <link rel="stylesheet" href="/static/css/app.css?v=admin-tools-1">
 </head>
 <body>
   <div class="layout">
@@ -18,11 +18,13 @@
         <button type="button" data-page="requirements">Требования</button>
         <button type="button" data-page="tools">Средства</button>
         <button type="button" data-page="org">Меры</button>
-        <button type="button" data-page="registry">Реестр</button>
         <button type="button" data-page="gaps">Незакрытые требования</button>
         <button type="button" data-page="export">Экспорт базы</button>
       </nav>
-      <button class="btn" type="button" id="logout">Выйти</button>
+      <div class="admin-account">
+        <button class="btn" type="button" id="admin-profile"><span class="admin-avatar" aria-hidden="true">А</span> Профиль администратора</button>
+        <button class="btn" type="button" id="logout">Выйти</button>
+      </div>
     </aside>
     <main class="main">
       <section id="page-dashboard">
@@ -61,43 +63,7 @@
       </section>
 
       <section id="page-tools" class="hidden">
-        <div class="top">
-          <div>
-            <p class="eyebrow">Справочник</p>
-            <h1>Средства защиты</h1>
-          </div>
-        </div>
-        <div class="card toolbar upload-bar">
-          <label class="btn secondary file-btn">Импортировать JSON
-            <input type="file" accept=".json" data-upload="tools">
-          </label>
-          <span class="upload-status" data-upload-status="tools">Файл не выбран</span>
-        </div>
-        <button class="btn" type="button" id="add-tools">Добавить запись</button>
-        <div id="tool-form" class="card hidden"></div>
-        <div id="tool-table"></div>
-      </section>
-
-      <section id="page-org" class="hidden">
-        <div class="top">
-          <div>
-            <p class="eyebrow">Справочник</p>
-            <h1>Организационные меры</h1>
-          </div>
-        </div>
-        <div class="card toolbar upload-bar">
-          <label class="btn secondary file-btn">Импортировать JSON
-            <input type="file" accept=".json" data-upload="org">
-          </label>
-          <span class="upload-status" data-upload-status="org">Файл не выбран</span>
-        </div>
-        <button class="btn" type="button" id="add-org">Добавить запись</button>
-        <div id="org-form" class="card hidden"></div>
-        <div id="org-table"></div>
-      </section>
-
-      <section id="page-registry" class="hidden">
-        <div class="top"><h1>Реестр российского ПО</h1></div>
+        <div class="top"><h1>Средства защиты</h1></div>
         <div class="card registry-control-card">
           <div class="toolbar registry-actions">
             <label class="btn secondary file-btn">Импорт файла
@@ -134,13 +100,15 @@
           </form>
         </dialog>
         <div class="toolbar" role="group" aria-label="Статус записей реестра">
-          <button class="btn" type="button" data-registry-state="active" aria-pressed="true">Актуальное ПО</button>
+          <button class="btn" type="button" data-registry-state="active" aria-pressed="true">Средства и актуальное ПО</button>
           <button class="btn secondary" type="button" data-registry-state="excluded" aria-pressed="false">Исключённое ПО</button>
         </div>
         <form id="registry-search" class="card toolbar">
-          <label for="registry-query">Поиск по номеру, названию, правообладателю</label>
+          <label for="registry-query">Поиск по коду, названию или правообладателю</label>
           <input id="registry-query" type="search"><button class="btn" type="submit">Найти</button>
         </form>
+        <button class="btn" type="button" id="add-tools">Добавить запись</button>
+        <div id="tool-form" class="card hidden"></div>
         <div id="registry-table"></div>
         <div class="toolbar">
           <button class="btn secondary" id="registry-prev" type="button">Назад</button>
@@ -148,6 +116,25 @@
           <button class="btn secondary" id="registry-next" type="button">Далее</button>
         </div>
       </section>
+
+      <section id="page-org" class="hidden">
+        <div class="top">
+          <div>
+            <p class="eyebrow">Справочник</p>
+            <h1>Организационные меры</h1>
+          </div>
+        </div>
+        <div class="card toolbar upload-bar">
+          <label class="btn secondary file-btn">Импортировать JSON
+            <input type="file" accept=".json" data-upload="org">
+          </label>
+          <span class="upload-status" data-upload-status="org">Файл не выбран</span>
+        </div>
+        <button class="btn" type="button" id="add-org">Добавить запись</button>
+        <div id="org-form" class="card hidden"></div>
+        <div id="org-table"></div>
+      </section>
+
 
       <section id="page-gaps" class="hidden">
         <div class="top">
@@ -173,9 +160,23 @@
         </div>
         <pre id="export-preview" class="card hidden"></pre>
       </section>
+      <section id="page-profile" class="hidden">
+        <div class="top"><h1>Профиль администратора</h1></div>
+        <form class="card admin-profile-form" id="admin-profile-form">
+          <label for="admin-login">Логин</label>
+          <input id="admin-login" name="login" autocomplete="username" required minlength="3" maxlength="64">
+          <label for="admin-current-password">Текущий пароль</label>
+          <input id="admin-current-password" name="current_password" type="password" autocomplete="current-password" required>
+          <label for="admin-new-password">Новый пароль</label>
+          <input id="admin-new-password" name="new_password" type="password" autocomplete="new-password" minlength="8" maxlength="128">
+          <button class="btn" type="submit">Сохранить</button>
+        </form>
+        <h2>Пользователи</h2>
+        <div id="admin-users"></div>
+      </section>
     </main>
   </div>
   <script src="/static/js/api.js"></script>
-  <script src="/static/js/admin.js?v=registry-controls-4"></script>
+  <script src="/static/js/admin.js?v=admin-tools-1"></script>
 </body>
 </html>
