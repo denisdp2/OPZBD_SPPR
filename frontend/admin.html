@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Администратор — СППР</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=admin-tools-2">
+  <link rel="stylesheet" href="/static/css/app.css?v=admin-tools-3">
 </head>
 <body>
   <div class="layout">
@@ -54,9 +54,9 @@
           <label class="btn secondary file-btn">Импортировать JSON
             <input type="file" accept=".json" data-upload="requirements">
           </label>
-          <span class="upload-status" data-upload-status="requirements">Файл не выбран</span>
+          <button class="btn" type="button" id="add-requirements">Добавить запись</button>
+          <span class="upload-status" data-upload-status="requirements"></span>
         </div>
-        <button class="btn" type="button" id="add-requirements">Добавить запись</button>
         <div id="req-form" class="card hidden"></div>
         <div id="req-table"></div>
       </section>
@@ -98,15 +98,17 @@
             <div id="registry-price-error" role="status"></div>
           </form>
         </dialog>
-        <div class="toolbar" role="group" aria-label="Статус записей реестра">
+        <div class="card toolbar catalog-controls">
+          <div class="toolbar" role="group" aria-label="Статус записей реестра">
           <button class="btn" type="button" data-registry-state="active" aria-pressed="true">Средства и актуальное ПО</button>
           <button class="btn secondary" type="button" data-registry-state="excluded" aria-pressed="false">Исключённое ПО</button>
+          </div>
+          <button class="btn" type="button" id="add-tools">Добавить запись</button>
         </div>
         <form id="registry-search" class="card toolbar">
           <label for="registry-query">Поиск по коду, названию или правообладателю</label>
           <input id="registry-query" type="search"><button class="btn" type="submit">Найти</button>
         </form>
-        <button class="btn" type="button" id="add-tools">Добавить запись</button>
         <div id="tool-form" class="card hidden"></div>
         <div id="registry-table"></div>
         <div class="toolbar">
@@ -127,9 +129,9 @@
           <label class="btn secondary file-btn">Импортировать JSON
             <input type="file" accept=".json" data-upload="org">
           </label>
-          <span class="upload-status" data-upload-status="org">Файл не выбран</span>
+          <button class="btn" type="button" id="add-org">Добавить запись</button>
+          <span class="upload-status" data-upload-status="org"></span>
         </div>
-        <button class="btn" type="button" id="add-org">Добавить запись</button>
         <div id="org-form" class="card hidden"></div>
         <div id="org-table"></div>
       </section>
@@ -196,6 +198,6 @@
     </main>
   </div>
   <script src="/static/js/api.js"></script>
-  <script src="/static/js/admin.js?v=admin-tools-2"></script>
+  <script src="/static/js/admin.js?v=admin-tools-3"></script>
 </body>
 </html>

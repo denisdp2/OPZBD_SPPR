@@ -365,7 +365,7 @@ let registryOffset = 0;
 let registryQuery = "";
 let priceTimer;
 let registryState = "active";
-let registrySort = "id";
+let registrySort = "name";
 let registryDirection = "asc";
 let registryRequest = 0;
 
@@ -397,13 +397,13 @@ async function loadRegistry() {
       registryOffset = Math.max(0, Math.floor((data.total - 1) / 50) * 50);
       return loadRegistry();
     }
-    const columns = [["id", "Код"], ["name", "Название"], ["covers", "Закрывает"], ["owner", "Правообладатель"],
+    const columns = [["name", "Название"], ["covers", "Закрывает"], ["owner", "Правообладатель"],
       ["value", "Стоимость, руб."]];
     const headers = columns.map(([key, title]) => `<button type="button" class="sort-column" data-sort="${key}"
       aria-label="Сортировать: ${title}" title="Сортировка по возрастанию / убыванию">${title} ${registrySort === key ? (registryDirection === "asc" ? "↑" : "↓") : "↕"}</button>`);
     root.innerHTML = table([...headers, ""],
       data.items.map(({ item, record: r, price: p, manual_price: manual, source_url: url }) => `<tr>
-        <td class="registry-code">${esc(item.id)}</td><td>${sourceLink(url, item.name)}</td><td>${esc(item.covers.join(", "))}</td><td>${esc(item.vendor)}</td>
+        <td>${sourceLink(url, item.name)}</td><td>${esc(item.covers.join(", "))}</td><td>${esc(item.vendor)}</td>
         <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
           ${r ? `<button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
             data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button>` : ""}</td>

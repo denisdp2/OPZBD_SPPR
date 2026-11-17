@@ -487,3 +487,48 @@ svg { display: block; width: 20px; height: 20px; }
   border-color: #a9bacd;
   background: #eff3f7;
 }
+
+/* Plain controls and section styling shared in appearance with the admin pages. */
+body { font-size: 14px; }
+.sidebar .brand { padding: 0 10px 22px; font-size: 18px; }
+.sidebar .nav-link, .sidebar .nav-link.is-active {
+  min-height: 42px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.topbar { min-height: 52px; backdrop-filter: none; }
+#refresh-data { width: auto; padding: 0 10px; }
+.mobile-menu { width: auto; padding: 0 10px; }
+.page-heading h1 { letter-spacing: normal; }
+.panel-heading h2 { font-size: 16px; }
+.stat-card, .panel, .evaluation-banner, .builder-actions { box-shadow: none; }
+.coverage-ring { width: auto; height: auto; flex: 0 0 auto; background: none; }
+.coverage-ring::before { content: none; }
+.coverage-ring span { color: var(--muted); font-size: 12px; }
+.catalog-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-radius: 0;
+  border-width: 0 0 1px;
+}
+.catalog-item-title { font-size: 13px; }
+.catalog-item-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  min-height: 32px;
+  padding: 5px 9px;
+  color: var(--blue);
+  background: var(--blue-light);
+}
+.catalog-details, .profile-details { margin-top: 6px; }
+.catalog-details summary, .profile-details summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.catalog-details[open] > .covers-row { margin-top: 7px; }
+.cost-editor { border-color: var(--line); background: var(--surface); }
+.mini-item-copy strong, .mini-item-cost { font-size: 12px; }

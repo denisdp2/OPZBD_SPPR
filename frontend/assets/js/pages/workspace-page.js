@@ -346,13 +346,6 @@ function renderRequirements() {
   }
 }
 
-function miniIcon(kind) {
-  if (kind === "org") {
-    return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3.5h8l4 4v13H7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M15 3.8v4h4M10 12h6M10 15.5h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
-  }
-  return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 9h8M8 12h5M8 15h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
-}
-
 const CATALOG_PAGE_SIZE = 60;
 
 function catalogPageSize() {
@@ -390,41 +383,34 @@ function renderCatalog() {
       </div>` : (item.implement_days !== null && item.implement_days !== undefined
         ? `<div class="item-facts"><span class="item-fact">Срок внедрения: ${escapeHtml(item.implement_days)} дн.</span></div>` : "");
     return `<article class="catalog-item${selected ? " is-selected" : ""}">
-      <div class="catalog-item-icon">${miniIcon(item.kind)}</div>
       <div class="catalog-item-main">
         <div class="catalog-item-title-row"><strong class="catalog-item-title">${escapeHtml(item.name)}</strong><span class="kind-tag${item.kind === "org" ? " kind-org" : ""}">${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</span></div>
-        <p class="catalog-description">${escapeHtml(item.description || "Описание не указано.")}</p>
-        ${facts}
-        <div class="covers-label">Связанные требования</div>
-        <div class="covers-row">${covers || '<span class="cover-chip cover-chip-empty">Не сопоставлено · не влияет на покрытие</span>'}</div>
+        <details class="catalog-details">
+          <summary>Сведения</summary>
+          ${item.description ? `<p class="catalog-description">${escapeHtml(item.description)}</p>` : ""}
+          ${facts}
+          <div class="covers-row">${covers || '<span class="cover-chip cover-chip-empty">Нет связанных требований</span>'}</div>
+        </details>
         ${selected ? `<div class="cost-editor">
           <label>Внедрение, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.capex === null || costs.capex === undefined ? "" : escapeHtml(costs.capex)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="capex" aria-label="Стоимость внедрения: ${escapeHtml(item.name)}"><span>₽</span></span></label>
           <label>Эксплуатация в месяц, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.opex_month === null || costs.opex_month === undefined ? "" : escapeHtml(costs.opex_month)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="opex_month" aria-label="Стоимость эксплуатации в месяц: ${escapeHtml(item.name)}"><span>₽</span></span></label>
         </div>` : ""}
       </div>
-      <button type="button" class="catalog-item-select" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? '<svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'}</button>
+      <button type="button" class="catalog-item-select" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? "Убрать" : "Добавить"}</button>
     </article>`;
-  }).join("") || `<div class="empty-state"><div class="empty-illustration">⌕</div><strong>${state.items.length ? "Ничего не найдено" : "Каталог пока пуст"}</strong><p>${state.items.length ? "Измените запрос или выберите другую категорию." : "Импортируйте стартовый набор и выгрузку реестра через административный раздел."}</p></div>`;
+  }).join("") || `<div class="empty-state"><strong>${state.items.length ? "Ничего не найдено" : "Каталог пока пуст"}</strong><p>${state.items.length ? "Измените запрос или выберите другую категорию." : "Импортируйте стартовый набор и выгрузку реестра через административный раздел."}</p></div>`;
   $("#catalog-show-more").hidden = visible.length >= filtered.length;
   $("#catalog-total").textContent = `${state.items.length} позиций`;
   const toolCount = state.items.filter((item) => item.kind === "tool").length;
   const orgCount = state.items.filter((item) => item.kind === "org").length;
-  const unmappedCount = state.items.filter((item) => !(item.covers ?? []).length).length;
   const allTab = $('[data-kind="all"]');
   const toolTab = $('[data-kind="tool"]');
   const orgTab = $('[data-kind="org"]');
   if (allTab) allTab.textContent = `Все (${state.items.length})`;
   if (toolTab) toolTab.textContent = `Средства (${toolCount})`;
   if (orgTab) orgTab.textContent = `Оргмеры (${orgCount})`;
-  const sourceSummary = $("#catalog-source-summary");
-  if (sourceSummary) {
-    const parts = [`${toolCount} средств защиты`, `${orgCount} организационных мер`];
-    if (toolCount === 0) parts.push("средства появятся после импорта выгрузки реестра в административном разделе");
-    if (unmappedCount > 0) parts.push(`${unmappedCount} позиций без связи с требованиями — их нужно сопоставить в разделе администратора «Средства»`);
-    sourceSummary.textContent = parts.join(" · ");
-  }
   $("#catalog-visible-count").textContent = filtered.length > visible.length
-    ? `Показано ${visible.length} из ${filtered.length} найденных. Нажмите «Показать ещё», чтобы увидеть остальные`
+    ? `Показано ${visible.length} из ${filtered.length}`
     : `Показано ${filtered.length} из ${state.items.length}`;
 }
 
@@ -454,7 +440,7 @@ function renderOverview() {
     ? (evaluation.all_mandatory_covered ? "Текущий набор соответствует выбранному профилю по проверенным требованиям." : `Не закрыто обязательных требований: ${evaluation.uncovered_mandatory.length}.`)
     : "Результат проверки обязательных требований появится после расчёта.";
   $("#overview-selected-list").innerHTML = selected.length ? selected.slice(0, 5).map(({ item, total }) => (
-    `<div class="mini-item"><span class="mini-item-icon">${miniIcon(item.kind)}</span><span class="mini-item-copy"><strong>${escapeHtml(item.name)}</strong><small>${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</small></span><strong class="mini-item-cost">${money(total)}</strong></div>`
+    `<div class="mini-item"><span class="mini-item-copy"><strong>${escapeHtml(item.name)}</strong><small>${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</small></span><strong class="mini-item-cost">${money(total)}</strong></div>`
   )).join("") : '<div class="empty-state"><strong>Набор пока пуст</strong><p>Перейдите к подбору и добавьте средства или организационные меры.</p></div>';
   $("#overview-total-cost").textContent = money(totalSelectedCost());
 }
@@ -560,7 +546,7 @@ function renderSolution(solution, source = "example") {
   const selectedSet = new Set(solution.selected);
   const selectedItemsForResult = selectedItems().filter(({ item }) => selectedSet.has(item.id));
   $("#solution-items").innerHTML = selectedItemsForResult.length ? selectedItemsForResult.map(({ item, total }) => (
-    `<div class="solution-item"><span class="mini-item-icon">${miniIcon(item.kind)}</span><span>${escapeHtml(item.name)}</span><strong>${money(total)}</strong></div>`
+    `<div class="solution-item"><span>${escapeHtml(item.name)}</span><strong>${money(total)}</strong></div>`
   )).join("") : '<div class="empty-inline">Алгоритм не выбрал позиции из текущего набора.</div>';
   const chip = $("#solution-chip");
   chip.classList.toggle("is-success", Boolean(solution.feasible));
@@ -580,7 +566,7 @@ function renderSolution(solution, source = "example") {
 function renderPareto(solutions, selectedSolution = state.lastOptimization) {
   const container = $("#pareto-chart");
   if (!solutions?.length) {
-    container.innerHTML = '<div class="chart-placeholder"><span class="chart-placeholder-icon">↗</span><strong>Недостаточно данных для графика</strong><span>Добавьте позиции и запустите оптимизацию.</span></div>';
+    container.innerHTML = '<div class="chart-placeholder"><strong>Недостаточно данных для графика</strong><span>Добавьте позиции и запустите оптимизацию.</span></div>';
     return;
   }
   const width = 650;
