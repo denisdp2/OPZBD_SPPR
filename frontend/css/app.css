@@ -326,3 +326,5 @@ button:disabled { cursor: wait; opacity: .55; }
 .upload-bar > .btn, .catalog-controls .btn { min-height: 42px; font: inherit; }
 .upload-bar .upload-status:empty { display: none; }
 #req-table > form, #org-table > form { margin-bottom: 16px; }
+
+.catalog-add, #req-form, #tool-form, #org-form { margin-bottom: 16px; }

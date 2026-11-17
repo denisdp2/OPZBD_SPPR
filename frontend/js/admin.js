@@ -90,6 +90,20 @@ async function loadDashboard() {
   }
 }
 
+const catalogDeleteDialog = document.getElementById("catalog-delete-dialog");
+
+function confirmCatalogDelete(id) {
+  if (catalogDeleteDialog.open) return Promise.resolve(false);
+  document.getElementById("catalog-delete-name").textContent = id;
+  catalogDeleteDialog.returnValue = "";
+  return new Promise(resolve => {
+    catalogDeleteDialog.addEventListener("close", () => {
+      resolve(catalogDeleteDialog.returnValue === "delete");
+    }, {once: true});
+    catalogDeleteDialog.showModal();
+  });
+}
+
 function bindCrud({ tableId, formId, listPath, itemPath, columns = [], fields = [], formHtml, toPayload, toRow, filter, refreshTable }) {
   const tableRoot = document.getElementById(tableId);
   const formRoot = document.getElementById(formId);
@@ -131,8 +145,11 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns = [], fields = 
     formRoot.classList.remove("hidden");
     formRoot.innerHTML = formHtml(values);
     formRoot.scrollIntoView({block: "nearest"});
+    formRoot.querySelector("input:not([type=hidden]):not([readonly])")?.focus({preventScroll: true});
     formRoot.querySelector("form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      const submit = event.submitter;
+      if (submit) submit.disabled = true;
       const data = toPayload(new FormData(event.target));
       try {
         await SZI.request(itemPath(data.id), {
@@ -143,6 +160,8 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns = [], fields = 
         await refresh();
       } catch (err) {
         showFlash(formRoot, err.message);
+      } finally {
+        if (submit) submit.disabled = false;
       }
     });
     formRoot.querySelector("[data-cancel]").addEventListener("click", () => {
@@ -173,7 +192,7 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns = [], fields = 
       }
     }
     if (btn.hasAttribute("data-delete")) {
-      if (!confirm(`Удалить «${id}»?`)) return;
+      if (!await confirmCatalogDelete(id)) return;
       try {
         await SZI.request(itemPath(id), { method: "DELETE" });
         await refresh();
@@ -320,6 +339,10 @@ async function loadGaps() {
 navButtons.forEach((btn) => {
   btn.addEventListener("click", () => showPage(btn.dataset.page));
 });
+
+document.getElementById("add-requirements").addEventListener("click", () => requirementsUi.openForm());
+document.getElementById("add-tools").addEventListener("click", () => toolsUi.openForm({kind: "tool"}));
+document.getElementById("add-org").addEventListener("click", () => orgUi.openForm({kind: "org"}));
 
 document.querySelectorAll("[data-upload]").forEach((input) => {
   input.addEventListener("change", async () => {
