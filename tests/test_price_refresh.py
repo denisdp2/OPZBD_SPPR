@@ -112,3 +112,4 @@ def test_stop_preserves_processed_links(client, monkeypatch):
         "errors": 0,
     }
     assert client.post(f"{url}?limit=1").json()["total"] == 2
+    assert client.post(f"{url}/stop").json()["status"] == "stopped"

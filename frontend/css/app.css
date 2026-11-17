@@ -250,3 +250,38 @@ th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transfor
 #registry-table td:nth-child(5) { white-space: nowrap; }
 #registry-table[aria-busy="true"] { opacity: .65; }
 button:disabled { cursor: wait; opacity: .55; }
+
+.main { min-width: 0; }
+
+#page-registry > .card,
+#page-registry > .toolbar,
+#registry-table {
+  margin-bottom: 16px;
+}
+
+.registry-control-card {
+  display: grid;
+  gap: 16px;
+}
+
+.registry-control-card [role="status"]:empty { display: none; }
+.registry-control-card [role="status"] { overflow-wrap: anywhere; }
+.registry-actions { gap: 12px; }
+.registry-actions #price-progress { flex-basis: 100%; }
+
+#registry-table table { min-width: 640px; }
+#registry-table td:nth-child(2) { min-width: 165px; }
+#registry-table td:nth-child(3) { min-width: 145px; }
+
+.registry-edit-price {
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin-left: 4px;
+  cursor: pointer;
+  color: var(--navy);
+  background: transparent;
+}
+
+.registry-edit-price:hover { background: #e8eef5; }
+#registry-price-form > .toolbar { margin-top: 16px; }

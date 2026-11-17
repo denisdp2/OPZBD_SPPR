@@ -2,6 +2,7 @@ import asyncio
 import io
 import sqlite3
 import zipfile
+from pathlib import Path
 
 import httpx
 import pytest
@@ -269,7 +270,10 @@ def test_official_download_uses_last_successful_copy(client, monkeypatch):
 
     monkeypatch.setattr("app.api.app.download_registry_xml", download)
     url = "/api/admin/registry/download/xml"
-    assert client.get(url).content == b"<registry/>"
+    saved = client.post(url)
+    assert saved.status_code == 200
+    assert saved.json()["cached"] is False
+    assert Path(saved.json()["path"]).read_bytes() == b"<registry/>"
 
     def unavailable(target):
         raise OSError("Сайт недоступен")

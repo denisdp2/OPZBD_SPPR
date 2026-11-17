@@ -308,7 +308,8 @@ document.querySelectorAll("[data-upload]").forEach((input) => {
         ? (/\.(db|sqlite|sqlite3)$/i.test(file.name) ? "ru-software-sqlite" : "ru-software")
         : "bundle";
       const report = await SZI.request(`/api/admin/import/${importer}`, { method: "POST", body: data });
-      status.textContent = `Загружено: ${report.imported}. Ошибок: ${report.errors.length}. ` + report.errors.slice(0, 3).join("; ");
+      status.textContent = `Загружено: ${report.imported}. Ошибок: ${report.errors.length}.`;
+      if (report.errors.length) status.textContent += " " + report.errors.slice(0, 3).join("; ");
       if (input.dataset.upload === "registry") await loadRegistry();
       if (input.dataset.upload === "tools") await loadTools();
       if (input.dataset.upload === "org") await loadOrg();
@@ -391,8 +392,8 @@ async function loadRegistry() {
         <td>${esc(r.reg_number)}</td><td>${esc(r.name)}</td><td>${esc(r.owner)}</td>
         <td>${r.exclusion_date ? `Исключено: ${esc(r.exclusion_date)}` : "В реестре"}</td>
         <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
-          <button class="btn secondary" type="button" data-price-number="${r.reg_number}"
-            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(r.name)}">Изменить</button></td>
+          <button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
+            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(r.name)}"><span aria-hidden="true">✎</span></button></td>
         <td>${sourceLink(url, "Источник")}</td></tr>`));
     root.removeAttribute("aria-busy");
     document.getElementById("registry-count").textContent = data.total ? `${registryOffset + 1}–${Math.min(registryOffset + 50, data.total)} из ${data.total}` : "Реестр пока пуст";
@@ -463,17 +464,10 @@ document.querySelectorAll("[data-official-format]").forEach(control => control.a
   downloadDialog.close();
   status.textContent = `Скачивание ${format.toUpperCase()} с сайта реестра…`;
   try {
-    const response = await fetch(`/api/admin/registry/download/${format}`, { credentials: "same-origin" });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Не удалось скачать выгрузку");
-    }
-    const url = URL.createObjectURL(await response.blob());
-    const a = document.createElement("a");
-    a.href = url; a.download = `registry.${format}`; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    status.textContent = response.headers.get("X-Registry-Source") === "cache"
-      ? "Скачана последняя сохранённая выгрузка." : `${format.toUpperCase()} скачан.`;
+    const result = await SZI.request(`/api/admin/registry/download/${format}`, {method: "POST"});
+    status.textContent = result.cached
+      ? `Последняя сохранённая выгрузка: ${result.path}`
+      : `Файл сохранён: ${result.path}`;
   } catch (error) { status.textContent = error.message; }
   finally { button.disabled = false; }
 }));

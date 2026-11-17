@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Администратор — СППР</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=registry-controls-2">
+  <link rel="stylesheet" href="/static/css/app.css?v=registry-controls-3">
 </head>
 <body>
   <div class="layout">
@@ -98,7 +98,7 @@
 
       <section id="page-registry" class="hidden">
         <div class="top"><h1>Реестр российского ПО</h1></div>
-        <div class="card">
+        <div class="card registry-control-card">
           <div class="toolbar registry-actions">
             <label class="btn secondary file-btn">Импорт файла
               <input type="file" accept=".xml,.xls,.xlsx,.json,.db,.sqlite,.sqlite3" data-upload="registry">
@@ -126,7 +126,6 @@
             <h2>Стоимость</h2>
             <label for="registry-price-value">Цена, ₽</label>
             <input id="registry-price-value" type="number" min="0" step="any">
-            <p>Пустое поле возвращает цену из источника.</p>
             <div class="toolbar">
               <button class="btn" type="submit">Сохранить</button>
               <button class="btn secondary" type="submit" formmethod="dialog">Отмена</button>
@@ -177,6 +176,6 @@
     </main>
   </div>
   <script src="/static/js/api.js"></script>
-  <script src="/static/js/admin.js?v=registry-controls-2"></script>
+  <script src="/static/js/admin.js?v=registry-controls-3"></script>
 </body>
 </html>

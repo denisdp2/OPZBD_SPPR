@@ -9,8 +9,7 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from shutil import copyfile
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from typing import Literal
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
@@ -30,7 +29,6 @@ from fastapi import (
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
-from starlette.background import BackgroundTask
 
 from app import __version__, paths
 from app.auth.deps import COOKIE_NAME, current_user, require_admin, require_login
@@ -378,47 +376,37 @@ def create_app(
             headers={"Content-Disposition": 'attachment; filename="registry.xlsx"'},
         )
 
-    @admin.get("/registry/download/{format}")
-    def download_official(format: Literal["xml", "html", "xls"]):
-        directory = TemporaryDirectory()
+    def save_registry_export(format: str) -> tuple[Path, bool]:
         cache = paths.data_dir() / "registry-cache" / f"registry.{format}"
         try:
-            target = Path(directory.name) / f"registry.{format}"
-            target = (
-                download_registry_xml(target)
-                if format == "xml"
-                else download_registry_export(target, format)
-            )
             cache.parent.mkdir(parents=True, exist_ok=True)
-            with NamedTemporaryFile(dir=cache.parent, delete=False) as output:
-                cached_copy = Path(output.name)
-            try:
-                copyfile(target, cached_copy)
-                cached_copy.replace(cache)
-            finally:
-                cached_copy.unlink(missing_ok=True)
-            return FileResponse(
-                target,
-                filename=f"registry.{format}",
-                media_type={
-                    "xml": "application/xml",
-                    "html": "text/html",
-                    "xls": "application/vnd.ms-excel",
-                }[format],
-                background=BackgroundTask(directory.cleanup),
-            )
+            with TemporaryDirectory(dir=cache.parent) as directory:
+                target = Path(directory) / cache.name
+                if format == "xml":
+                    download_registry_xml(target)
+                else:
+                    download_registry_export(target, format)
+                target.replace(cache)
+            return cache, False
         except (httpx.HTTPError, ValueError, OSError) as exc:
-            directory.cleanup()
             if cache.is_file():
-                return FileResponse(
-                    cache, filename=cache.name, headers={"X-Registry-Source": "cache"}
-                )
-            message = "Не удалось скачать выгрузку с официального сайта. "
+                return cache, True
+            message = "Не удалось сохранить выгрузку реестра."
             if "CERTIFICATE_VERIFY_FAILED" in str(exc):
-                message += "Сертификат сайта не доверен этой системе."
-            else:
-                message += str(exc)[:250]
+                message += " Сертификат сайта не доверен этой системе."
             raise HTTPException(status_code=502, detail=message) from exc
+
+    @admin.post("/registry/download/{format}")
+    def save_official(format: Literal["xml", "xls"]) -> dict:
+        path, cached = save_registry_export(format)
+        return {"path": str(path.resolve()), "cached": cached}
+
+    @admin.get("/registry/download/{format}")
+    def download_official(format: Literal["xml", "html", "xls"]):
+        path, cached = save_registry_export(format)
+        return FileResponse(
+            path, filename=path.name, headers={"X-Registry-Source": "cache"} if cached else {}
+        )
 
     @admin.put("/registry/{number}/price", status_code=204)
     def update_registry_price(number: int, body: ManualRegistryPrice) -> None:
