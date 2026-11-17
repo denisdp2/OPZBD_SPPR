@@ -32,7 +32,22 @@ function table(headers, rows) {
     <tbody>${rows.join("")}</tbody></table>`;
 }
 
+let activePage;
+let registryVisit = 0;
+let showPriceResult = false;
+
 function showPage(id) {
+  if (activePage === "registry" && id !== "registry") {
+    registryVisit++;
+    showPriceResult = false;
+    clearTimeout(priceTimer);
+    const registryPage = document.getElementById("page-registry");
+    registryPage.querySelector(".flash")?.remove();
+    registryPage.querySelectorAll('[role="status"]:not(#registry-count)').forEach((status) => {
+      status.textContent = "";
+    });
+  }
+  activePage = id;
   pages.forEach((page) => page.classList.toggle("hidden", page.id !== `page-${id}`));
   navButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.page === id));
   if (id === "dashboard") loadDashboard();
@@ -295,6 +310,8 @@ document.querySelectorAll("[data-upload]").forEach((input) => {
   input.addEventListener("change", async () => {
     const status = document.querySelector(`[data-upload-status="${input.dataset.upload}"]`);
     const file = input.files && input.files[0];
+    const visit = registryVisit;
+    const showStatus = () => input.dataset.upload !== "registry" || visit === registryVisit;
     if (!file) {
       status.textContent = "Файл не выбран";
       return;
@@ -308,14 +325,16 @@ document.querySelectorAll("[data-upload]").forEach((input) => {
         ? (/\.(db|sqlite|sqlite3)$/i.test(file.name) ? "ru-software-sqlite" : "ru-software")
         : "bundle";
       const report = await SZI.request(`/api/admin/import/${importer}`, { method: "POST", body: data });
-      status.textContent = `Загружено: ${report.imported}. Ошибок: ${report.errors.length}.`;
-      if (report.errors.length) status.textContent += " " + report.errors.slice(0, 3).join("; ");
+      if (showStatus()) {
+        status.textContent = `Загружено: ${report.imported}. Ошибок: ${report.errors.length}.`;
+        if (report.errors.length) status.textContent += " " + report.errors.slice(0, 3).join("; ");
+      }
       if (input.dataset.upload === "registry") await loadRegistry();
       if (input.dataset.upload === "tools") await loadTools();
       if (input.dataset.upload === "org") await loadOrg();
       if (input.dataset.upload === "requirements") await loadRequirements();
     } catch (err) {
-      status.textContent = err.message;
+      if (showStatus()) status.textContent = err.message;
     } finally {
       input.disabled = false;
       input.value = "";
@@ -460,15 +479,19 @@ document.querySelectorAll("[data-official-format]").forEach(control => control.a
   const button = event.currentTarget;
   const status = document.getElementById("registry-download-status");
   const format = button.dataset.officialFormat;
+  const visit = registryVisit;
   button.disabled = true;
   downloadDialog.close();
   status.textContent = `Скачивание ${format.toUpperCase()} с сайта реестра…`;
   try {
     const result = await SZI.request(`/api/admin/registry/download/${format}`, {method: "POST"});
+    if (visit !== registryVisit) return;
     status.textContent = result.cached
       ? `Последняя сохранённая выгрузка: ${result.path}`
       : `Файл сохранён: ${result.path}`;
-  } catch (error) { status.textContent = error.message; }
+  } catch (error) {
+    if (visit === registryVisit) status.textContent = error.message;
+  }
   finally { button.disabled = false; }
 }));
 
@@ -482,38 +505,48 @@ document.getElementById("registry-prev").addEventListener("click", () => { regis
 document.getElementById("registry-next").addEventListener("click", () => { registryOffset += 50; loadRegistry(); });
 
 async function pollPrices() {
+  if (activePage !== "registry") return;
+  const visit = registryVisit;
   clearTimeout(priceTimer);
   try {
     const job = await SZI.request("/api/admin/registry/prices/status");
+    if (visit !== registryVisit) return;
     const running = ["running", "stopping"].includes(job.status);
+    if (running) showPriceResult = true;
     const collectButton = document.getElementById("collect-prices");
     const stopButton = document.getElementById("stop-prices");
     if (collectButton) collectButton.disabled = running;
     if (stopButton) stopButton.disabled = job.status !== "running";
-    document.getElementById("price-progress").textContent = job.status === "idle" ? "" :
+    document.getElementById("price-progress").textContent = job.status === "idle" || !showPriceResult ? "" :
       `${({running: "Обработка", stopping: "Остановка", stopped: "Остановлено", failed: "Сбой", completed: "Завершено"})[job.status]}: ${job.done}/${job.total}, ошибок: ${job.errors}. ${job.message || ""}`;
     if (running) priceTimer = setTimeout(pollPrices, 2000);
-    else if (job.status !== "idle") await loadRegistry();
-  } catch (err) { document.getElementById("price-progress").textContent = err.message; }
+    else if (job.status !== "idle" && showPriceResult) await loadRegistry();
+  } catch (err) {
+    if (visit === registryVisit) document.getElementById("price-progress").textContent = err.message;
+  }
 }
 
 document.getElementById("collect-prices").addEventListener("click", async event => {
+  const visit = registryVisit;
+  showPriceResult = true;
   event.currentTarget.disabled = true;
   try {
     await SZI.request("/api/admin/registry/prices", {method: "POST"});
   } catch (error) {
-    showFlash(document.getElementById("page-registry"), error.message);
+    if (visit === registryVisit) showFlash(document.getElementById("page-registry"), error.message);
   }
-  await pollPrices();
+  if (activePage === "registry") await pollPrices();
 });
 document.getElementById("stop-prices")?.addEventListener("click", async event => {
+  const visit = registryVisit;
+  showPriceResult = true;
   event.currentTarget.disabled = true;
   try {
     await SZI.request("/api/admin/registry/prices/stop", {method: "POST"});
   } catch (error) {
-    showFlash(document.getElementById("page-registry"), error.message);
+    if (visit === registryVisit) showFlash(document.getElementById("page-registry"), error.message);
   }
-  await pollPrices();
+  if (activePage === "registry") await pollPrices();
 });
 
 (async () => {
