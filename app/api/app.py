@@ -32,8 +32,8 @@ from pydantic import ValidationError
 from starlette.background import BackgroundTask
 
 from app import __version__, paths
-from app.auth.deps import COOKIE_NAME, current_user, require_admin
-from app.auth.schemas import AuthUser, LoginRequest
+from app.auth.deps import COOKIE_NAME, current_user, require_admin, require_login
+from app.auth.schemas import AuthUser, LoginRequest, RegisterRequest, UserDraft
 from app.auth.store import AuthStore, User
 from app.core.interfaces import NotFoundError, Repository
 from app.core.models import (
@@ -103,6 +103,29 @@ def create_app(
     # ------------------------------------------------------------------ #
     #  Вход / роли
     # ------------------------------------------------------------------ #
+    @api.post("/auth/register", status_code=201, tags=["auth"])
+    def register(body: RegisterRequest) -> AuthUser:
+        login = body.login.strip()
+        if len(login) < 3:
+            raise HTTPException(status_code=422, detail="Логин должен содержать от 3 символов")
+        user = auth.register(login, body.password)
+        if user is None:
+            raise HTTPException(status_code=409, detail="Этот логин уже занят")
+        return AuthUser(id=user.id, login=user.login, role=user.role)
+
+    @api.get("/users/{user_id}/draft", tags=["scenario"])
+    def read_draft(user_id: int, user: User = Depends(require_login)) -> UserDraft | None:
+        if user_id != user.id:
+            raise HTTPException(status_code=403, detail="Черновик принадлежит другому аккаунту")
+        data = auth.read_draft(user.id)
+        return UserDraft.model_validate_json(data) if data is not None else None
+
+    @api.put("/users/{user_id}/draft", status_code=204, tags=["scenario"])
+    def save_draft(user_id: int, draft: UserDraft, user: User = Depends(require_login)) -> None:
+        if user_id != user.id:
+            raise HTTPException(status_code=403, detail="Черновик принадлежит другому аккаунту")
+        auth.save_draft(user.id, draft.model_dump_json())
+
     @api.post("/auth/login", tags=["auth"])
     def login(body: LoginRequest, response: Response) -> AuthUser:
         user = app.state.auth.authenticate(body.login, body.password)

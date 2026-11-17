@@ -43,3 +43,45 @@ def test_admin_page_requires_admin(client):
     client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
     res = client.get("/admin", follow_redirects=False)
     assert res.status_code == 200
+
+
+def test_registration_and_draft_survive_restart(client):
+    from fastapi.testclient import TestClient
+
+    from app.api import create_app
+
+    credentials = {"login": "anna", "password": "local-test-pass"}
+    registered = client.post("/api/auth/register", json={**credentials, "role": "admin"})
+    assert registered.status_code == 201
+    assert registered.json()["role"] == "user"
+    path = f"/api/users/{registered.json()['id']}/draft"
+    assert client.get(path).status_code == 401
+    assert (
+        client.post("/api/auth/register", json={**credentials, "login": "ANNA"}).status_code == 409
+    )
+    assert client.post("/api/auth/login", json=credentials).status_code == 200
+    assert client.get("/api/admin/gaps").status_code == 403
+    assert client.get(path).json() is None
+
+    draft = {
+        "profile_id": "K1",
+        "period_months": 6,
+        "requirements": ["ИАФ.1"],
+        "candidates": ["tool-1"],
+        "prices": {
+            "tool-1": {"capex": 1250.5, "opex_month": 0},
+            "tool-2": {"capex": "", "opex_month": 75},
+        },
+        "algorithm": "test",
+        "mode": "max_coverage",
+        "budget": "5000",
+    }
+    assert client.put(path, json=draft).status_code == 204
+    assert client.post("/api/auth/logout").status_code == 200
+
+    with TestClient(create_app()) as restarted:
+        restarted.post("/api/auth/login", json={"login": "user", "password": "user"})
+        assert restarted.get(path).status_code == 403
+        assert restarted.put(path, json=draft).status_code == 403
+        assert restarted.post("/api/auth/login", json=credentials).status_code == 200
+        assert restarted.get(path).json() == draft

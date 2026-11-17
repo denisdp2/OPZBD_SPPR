@@ -1,3 +1,4 @@
+import { apiRequest } from "../api/http-client.js";
 import { workspaceApi } from "../api/workspace-api.js";
 import { workspaceService } from "../services/workspace-service.js";
 
@@ -638,6 +639,7 @@ function renderAll() {
 }
 
 function invalidateResults() {
+  queueDraftSave();
   state.lastEvaluation = null;
   state.resultSource = "none";
   state.lastOptimization = null;
@@ -809,6 +811,51 @@ async function stopOptimization() {
   controller?.abort();
 }
 
+let draftPath;
+let draftSave = Promise.resolve();
+let draftDirty = false;
+let draftSaveFailed = false;
+
+function queueDraftSave() {
+  if (!draftPath || !state.initializedOnce || state.usingExamples) return;
+  draftDirty = true;
+  draftSave = draftSave.then(async () => {
+    if (!draftDirty) return;
+    draftDirty = false;
+    await apiRequest(draftPath, {
+      method: "PUT",
+      body: {
+        profile_id: state.profileId,
+        period_months: state.periodMonths,
+        requirements: [...state.selectedRequirements],
+        candidates: [...state.candidates.keys()],
+        prices: Object.fromEntries(state.prices),
+        algorithm: $("#algorithm-select").value,
+        mode: $("input[name='opt-mode']:checked").value,
+        budget: $("#budget-input").value,
+      },
+    });
+    draftSaveFailed = false;
+  }).catch(() => {
+    draftSaveFailed = true;
+    showToast("Не удалось сохранить черновик. Повторите изменение или попробуйте выйти ещё раз.", "error");
+  });
+}
+
+function restoreDraft(draft) {
+  state.profileId = draft.profile_id;
+  state.periodMonths = draft.period_months;
+  $("#period-input").value = draft.period_months;
+  state.selectedRequirements = new Set(draft.requirements);
+  state.prices = new Map(Object.entries(draft.prices));
+  state.candidates = new Map(draft.candidates.map((id) => [
+    id, { ...(state.prices.get(id) ?? { capex: "", opex_month: "" }) },
+  ]));
+  $("input[name='opt-mode'][value='" + draft.mode + "']").checked = true;
+  $("#budget-input").value = draft.budget;
+  updateModeVisibility();
+}
+
 function selectItem(itemId) {
   if (state.candidates.has(itemId)) {
     state.candidates.delete(itemId);
@@ -841,8 +888,9 @@ function onCostChange(event) {
   if (!input) return;
   const itemId = input.dataset.costItem;
   const field = input.dataset.costField;
+  if (input.validity.badInput) return;
   const parsed = input.value.trim() === "" ? "" : Math.max(0, Number(input.value) || 0);
-  input.value = String(parsed);
+  if (event.type === "change") input.value = String(parsed);
   const current = { ...(state.candidates.get(itemId) ?? priceFor(state.items.find((item) => item.id === itemId) ?? {})) };
   current[field] = parsed;
   state.candidates.set(itemId, current);
@@ -900,6 +948,7 @@ function bindEvents() {
     const button = event.target.closest("[data-toggle-item]");
     if (button) selectItem(button.dataset.toggleItem);
   });
+  $("#catalog-list").addEventListener("input", onCostChange);
   $("#catalog-list").addEventListener("change", onCostChange);
   $("#catalog-show-more").addEventListener("click", () => {
     const pageSize = catalogPageSize();
@@ -931,8 +980,15 @@ function bindEvents() {
   });
   $("#run-evaluation").addEventListener("click", runEvaluation);
   $("#run-optimization").addEventListener("click", runOptimization);
-  $("#algorithm-select").addEventListener("change", updateAlgorithmDescription);
-  $$('input[name="opt-mode"]').forEach((input) => input.addEventListener("change", updateModeVisibility));
+  $("#algorithm-select").addEventListener("change", () => {
+    updateAlgorithmDescription();
+    queueDraftSave();
+  });
+  $("#budget-input").addEventListener("change", queueDraftSave);
+  $$('input[name="opt-mode"]').forEach((input) => input.addEventListener("change", () => {
+    updateModeVisibility();
+    queueDraftSave();
+  }));
   $("#stop-optimization")?.addEventListener("click", stopOptimization);
   $("#refresh-data").addEventListener("click", async () => {
     showToast("Обновляем справочники…");
@@ -941,10 +997,21 @@ function bindEvents() {
   });
   $("#notice-close").addEventListener("click", () => { $("#data-notice").hidden = true; });
   $("#mobile-menu").addEventListener("click", () => $(".sidebar").classList.toggle("is-open"));
-  $("#logout-button").addEventListener("click", () => { window.location.assign("/"); });
+  $("#logout-button").addEventListener("click", async () => {
+    try {
+      if (draftSaveFailed) queueDraftSave();
+      await draftSave;
+      if (draftSaveFailed) return;
+      await apiRequest("/auth/logout", { method: "POST" });
+      window.location.assign("/");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
 }
 
-async function loadPageData() {
+async function loadPageData(draft = null) {
+  const previousAlgorithm = draft?.algorithm ?? $("#algorithm-select").value;
   const result = await workspaceService.loadCatalogs();
   state.requirements = result.requirements;
   state.items = result.items;
@@ -956,12 +1023,13 @@ async function loadPageData() {
   state.serverOnline = result.serverOnline;
   state.problems = result.problems;
 
+  if (draft) restoreDraft(draft);
   state.profileId = state.profiles.some((entry) => entry.id === state.profileId)
     ? state.profileId
     : (state.profiles[0]?.id ?? "");
   const validRequirementIds = new Set(state.requirements.map((entry) => entry.id));
   state.selectedRequirements = new Set([...state.selectedRequirements].filter((id) => validRequirementIds.has(id)));
-  if (!state.initializedOnce) {
+  if (!state.initializedOnce && !draft) {
     state.selectedRequirements = new Set(mandatoryIds());
   }
   mandatoryRequirementsAreIncluded();
@@ -970,16 +1038,30 @@ async function loadPageData() {
     if (!validItemIds.has(itemId)) state.candidates.delete(itemId);
   }
   state.initializedOnce = true;
-  for (const item of state.items) {
-    if (!state.prices.has(item.id)) state.prices.set(item.id, { capex: "", opex_month: "" });
-  }
   renderOptimizerOptions();
+  if (state.optimizers.some((optimizer) => optimizer.name === previousAlgorithm)) {
+    $("#algorithm-select").value = previousAlgorithm;
+    updateAlgorithmDescription();
+  }
   renderAll();
 }
 
-bindEvents();
-updateModeVisibility();
-loadPageData().catch((error) => {
+async function initialize() {
+  const account = await apiRequest("/auth/me");
+  const path = "/users/" + account.id + "/draft";
+  const draft = await apiRequest(path);
+  await loadPageData(draft);
+  draftPath = path;
+  $("#logout-button .profile-copy strong").textContent = account.login;
+  bindEvents();
+  updateModeVisibility();
+}
+
+initialize().catch((error) => {
+  if (error?.status === 401) {
+    window.location.replace("/");
+    return;
+  }
   state.usingExamples = true;
   state.problems = [error?.message || "Не удалось загрузить справочники"];
   renderApiState();

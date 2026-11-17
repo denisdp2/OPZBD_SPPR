@@ -39,6 +39,10 @@ class AuthStore:
                     password_hash TEXT NOT NULL,
                     role TEXT NOT NULL CHECK (role IN ('admin', 'user'))
                 );
+                CREATE TABLE IF NOT EXISTS drafts (
+                    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                    data TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS sessions (
                     token TEXT PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -56,6 +60,29 @@ class AuthStore:
                     "INSERT INTO users (login, password_hash, role) VALUES (?, ?, ?)",
                     ("user", hash_password("user"), "user"),
                 )
+
+    def register(self, login: str, password: str) -> User | None:
+        password_hash = hash_password(password)
+        with self._db() as con:
+            row = con.execute(
+                "INSERT INTO users (login, password_hash, role) VALUES (?, ?, 'user') "
+                "ON CONFLICT(login) DO NOTHING RETURNING id",
+                (login, password_hash),
+            ).fetchone()
+        return User(id=row["id"], login=login, role="user") if row else None
+
+    def read_draft(self, user_id: int) -> str | None:
+        with self._db() as con:
+            row = con.execute("SELECT data FROM drafts WHERE user_id = ?", (user_id,)).fetchone()
+        return row["data"] if row else None
+
+    def save_draft(self, user_id: int, data: str) -> None:
+        with self._db() as con:
+            con.execute(
+                "INSERT INTO drafts (user_id, data) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET data = excluded.data",
+                (user_id, data),
+            )
 
     def authenticate(self, login: str, password: str) -> User | None:
         with self._db() as con:
