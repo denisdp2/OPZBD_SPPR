@@ -2,6 +2,7 @@ import asyncio
 import io
 import sqlite3
 import zipfile
+from pathlib import Path
 
 import httpx
 import pytest
@@ -79,8 +80,8 @@ def test_parser_reports_bad_rows(tmp_path):
     path = tmp_path / "input.xlsx"
     path.write_bytes(workbook([[7, "ПО"], [7, "Дубликат"], ["bad", "Ошибка"], [8, ""]]))
     bundle, errors = RegistryImporter().parse(path)
-    assert len(bundle.items) == 1
-    assert len(errors) == 3
+    assert [item.name for item in bundle.items] == ["ПО", "Запись №8 (без наименования)"]
+    assert len(errors) == 2
 
 
 def test_registry_routes_require_admin(client):
@@ -235,3 +236,88 @@ def test_json_bundle_roundtrip(client):
     exported = client.get("/api/admin/export").json()
     assert exported["profiles"][0]["mandatory"] == ["R1"]
     assert exported["items"][0]["covers"] == ["R1"]
+
+
+def test_registry_import_and_manual_price(client):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    root = "/api/admin/registry"
+    upload = "/api/admin/import/ru-software"
+    xml = b"<registry><item><registrationNumber>1</registrationNumber></item></registry>"
+    result = client.post(upload, files={"file": ("registry.xml", xml)})
+    assert result.status_code == 200
+    assert result.json()["errors"] == []
+
+    result = client.post(
+        upload, files={"file": ("registry.json", b'[{"reg_number": 1, "name": ""}]')}
+    )
+    assert result.json()["imported"] == 1
+    assert result.json()["errors"] == []
+    assert client.put(f"{root}/1/price", json={"value": 0}).status_code == 204
+    assert client.post(upload, files={"file": ("registry.xml", xml)}).status_code == 200
+    row = client.get(root).json()["items"][0]
+    assert row["record"]["name"] == "Запись №1 (без наименования)"
+    assert row["manual_price"] == row["price"]["value"] == 0
+    assert client.put(f"{root}/1/price", json={"value": None}).status_code == 204
+    assert client.get(root).json()["items"][0]["price"] is None
+
+
+def test_official_download_uses_last_successful_copy(client, monkeypatch):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+
+    def download(target):
+        target.write_bytes(b"<registry/>")
+        return target
+
+    monkeypatch.setattr("app.api.app.download_registry_xml", download)
+    url = "/api/admin/registry/download/xml"
+    saved = client.post(url)
+    assert saved.status_code == 200
+    assert saved.json()["cached"] is False
+    assert Path(saved.json()["path"]).read_bytes() == b"<registry/>"
+
+    def unavailable(target):
+        raise OSError("Сайт недоступен")
+
+    monkeypatch.setattr("app.api.app.download_registry_xml", unavailable)
+    cached = client.get(url)
+    assert cached.content == b"<registry/>"
+    assert cached.headers["X-Registry-Source"] == "cache"
+
+
+def test_tools_join_registry_and_preserve_standalone_items(client):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    xml = (
+        b"<registry><item><registrationNumber>1</registrationNumber>"
+        b"<name>Z</name></item></registry>"
+    )
+    assert (
+        client.post(
+            "/api/admin/import/ru-software", files={"file": ("registry.xml", xml)}
+        ).status_code
+        == 200
+    )
+    for item in [
+        {"id": "ru-software-1", "name": "Z", "kind": "tool", "covers": ["REQ-1"]},
+        {"id": "standalone", "name": "A", "kind": "tool"},
+        {"id": "org", "name": "Org", "kind": "org"},
+    ]:
+        assert client.put(f"/api/admin/items/{item['id']}", json=item).status_code == 200
+    assert client.put("/api/admin/registry/1/price", json={"value": 30}).status_code == 204
+    rows = client.get("/api/admin/tools?sort=name&direction=desc").json()["items"]
+    assert [row["item"]["name"] for row in rows] == ["Z", "A"]
+    assert rows[0]["item"]["covers"] == ["REQ-1"]
+    assert rows[0]["price"]["value"] == 30
+    assert client.delete("/api/admin/items/ru-software-1").status_code == 200
+    assert client.get("/api/admin/registry").json()["total"] == 0
+
+
+def test_export_can_download_individual_catalogs(client):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    for kind in ("tool", "org"):
+        item = {"id": kind, "name": kind, "kind": kind}
+        assert client.put(f"/api/admin/items/{kind}", json=item).status_code == 200
+    for part, kind in (("tools", "tool"), ("org", "org")):
+        result = client.get(f"/api/admin/export?part={part}&download=true")
+        assert result.headers["content-disposition"] == f'attachment; filename="szi-{part}.json"'
+        assert [item["kind"] for item in result.json()["items"]] == [kind]
+    assert client.get("/api/admin/export?part=requirements").json()["items"] == []

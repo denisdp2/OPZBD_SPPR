@@ -32,15 +32,30 @@ function table(headers, rows) {
     <tbody>${rows.join("")}</tbody></table>`;
 }
 
+let activePage;
+let registryVisit = 0;
+let showPriceResult = false;
+
 function showPage(id) {
+  if (activePage === "tools" && id !== "tools") {
+    registryVisit++;
+    showPriceResult = false;
+    clearTimeout(priceTimer);
+    const registryPage = document.getElementById("page-tools");
+    registryPage.querySelector(".flash")?.remove();
+    registryPage.querySelectorAll('[role="status"]:not(#registry-count)').forEach((status) => {
+      status.textContent = "";
+    });
+  }
+  activePage = id;
   pages.forEach((page) => page.classList.toggle("hidden", page.id !== `page-${id}`));
   navButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.page === id));
   if (id === "dashboard") loadDashboard();
   if (id === "requirements") loadRequirements();
-  if (id === "tools") loadTools();
   if (id === "org") loadOrg();
   if (id === "gaps") loadGaps();
-  if (id === "registry") { loadRegistry(); pollPrices(); }
+  if (id === "tools") { loadRegistry(); pollPrices(); }
+  if (id === "profile") loadAdminProfile();
 }
 
 async function loadList(path) {
@@ -75,25 +90,49 @@ async function loadDashboard() {
   }
 }
 
-function bindCrud({ tableId, formId, listPath, itemPath, columns, formHtml, toPayload, toRow, filter }) {
+const catalogDeleteDialog = document.getElementById("catalog-delete-dialog");
+
+function confirmCatalogDelete(id) {
+  if (catalogDeleteDialog.open) return Promise.resolve(false);
+  document.getElementById("catalog-delete-name").textContent = id;
+  catalogDeleteDialog.returnValue = "";
+  return new Promise(resolve => {
+    catalogDeleteDialog.addEventListener("close", () => {
+      resolve(catalogDeleteDialog.returnValue === "delete");
+    }, {once: true});
+    catalogDeleteDialog.showModal();
+  });
+}
+
+function bindCrud({ tableId, formId, listPath, itemPath, columns = [], fields = [], formHtml, toPayload, toRow, filter, refreshTable }) {
   const tableRoot = document.getElementById(tableId);
   const formRoot = document.getElementById(formId);
   let cached = [];
   let offset = 0;
   let query = "";
+  let sortIndex = 0;
+  let sortAscending = true;
+  const collator = new Intl.Collator("ru", {numeric: true});
 
   async function refresh(reload = true) {
+    if (refreshTable) return refreshTable();
     try {
       if (reload) cached = await loadList(listPath);
       let items = filter ? cached.filter(filter) : cached;
       if (query) items = items.filter(item =>
         [item.id, item.name, item.title, item.vendor].join(" ").toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+      const field = fields[sortIndex];
+      if (field) items = [...items].sort((a, b) =>
+        (sortAscending ? 1 : -1) * collator.compare(String(a[field] ?? ""), String(b[field] ?? "")));
+      const headers = columns.map((label, index) => label
+        ? `<button class="sort-column" type="button" data-catalog-sort="${index}">${label} ${index === sortIndex ? (sortAscending ? "↑" : "↓") : "↕"}</button>`
+        : "");
       if (offset >= items.length) offset = Math.max(0, Math.floor((items.length - 1) / 50) * 50);
       tableRoot.innerHTML = `<form data-catalog-search class="card toolbar">
           <label for="${tableId}-query">Поиск по коду или названию</label>
           <input id="${tableId}-query" name="q" type="search" value="${esc(query)}">
           <button class="btn secondary" type="submit">Найти</button></form>` + table(
-        columns, items.slice(offset, offset + 50).map((item) => toRow(item)),
+        headers, items.slice(offset, offset + 50).map((item) => toRow(item)),
       ) + `<div class="toolbar"><button class="btn secondary" data-prev ${offset === 0 ? "disabled" : ""}>Назад</button>
         <span>${items.length ? `${offset + 1}–${Math.min(offset + 50, items.length)} из ${items.length}` : "Нет записей"}</span>
         <button class="btn secondary" data-next ${offset + 50 >= items.length ? "disabled" : ""}>Далее</button></div>`;
@@ -105,8 +144,12 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns, formHtml, toPa
   function openForm(values = {}) {
     formRoot.classList.remove("hidden");
     formRoot.innerHTML = formHtml(values);
+    formRoot.scrollIntoView({block: "nearest"});
+    formRoot.querySelector("input:not([type=hidden]):not([readonly])")?.focus({preventScroll: true});
     formRoot.querySelector("form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      const submit = event.submitter;
+      if (submit) submit.disabled = true;
       const data = toPayload(new FormData(event.target));
       try {
         await SZI.request(itemPath(data.id), {
@@ -117,6 +160,8 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns, formHtml, toPa
         await refresh();
       } catch (err) {
         showFlash(formRoot, err.message);
+      } finally {
+        if (submit) submit.disabled = false;
       }
     });
     formRoot.querySelector("[data-cancel]").addEventListener("click", () => {
@@ -127,6 +172,14 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns, formHtml, toPa
   tableRoot.addEventListener("click", async (event) => {
     const btn = event.target.closest("button");
     if (!btn) return;
+    if (btn.hasAttribute("data-catalog-sort")) {
+      const index = Number(btn.dataset.catalogSort);
+      sortAscending = index !== sortIndex || !sortAscending;
+      sortIndex = index;
+      offset = 0;
+      await refresh(false);
+      return;
+    }
     if (btn.hasAttribute("data-prev")) { offset = Math.max(0, offset - 50); await refresh(false); return; }
     if (btn.hasAttribute("data-next")) { offset += 50; await refresh(false); return; }
     const id = btn.dataset.id;
@@ -139,7 +192,7 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns, formHtml, toPa
       }
     }
     if (btn.hasAttribute("data-delete")) {
-      if (!confirm(`Удалить «${id}»?`)) return;
+      if (!await confirmCatalogDelete(id)) return;
       try {
         await SZI.request(itemPath(id), { method: "DELETE" });
         await refresh();
@@ -165,6 +218,7 @@ const requirementsUi = bindCrud({
   listPath: "/api/requirements",
   itemPath: (id) => `/api/admin/requirements/${encodeURIComponent(id)}`,
   columns: ["Код", "Группа", "Название", "Источник", ""],
+  fields: ["id", "group", "title", "source"],
   formHtml: (v) => `
     <form>
       <div class="form-grid">
@@ -241,15 +295,12 @@ function itemRow(item) {
 }
 
 const toolsUi = bindCrud({
-  tableId: "tool-table",
+  tableId: "registry-table",
   formId: "tool-form",
-  listPath: "/api/items",
   itemPath: (id) => `/api/admin/items/${encodeURIComponent(id)}`,
-  columns: ["Код", "Название", "Закрывает", ""],
-  filter: (item) => item.kind !== "org",
   formHtml: itemFormHtml,
   toPayload: itemPayload,
-  toRow: itemRow,
+  refreshTable: loadRegistry,
 });
 
 const orgUi = bindCrud({
@@ -258,6 +309,7 @@ const orgUi = bindCrud({
   listPath: "/api/items",
   itemPath: (id) => `/api/admin/items/${encodeURIComponent(id)}`,
   columns: ["Код", "Название", "Закрывает", ""],
+  fields: ["id", "name", "covers"],
   filter: (item) => item.kind === "org",
   formHtml: itemFormHtml,
   toPayload: itemPayload,
@@ -266,9 +318,6 @@ const orgUi = bindCrud({
 
 async function loadRequirements() {
   await requirementsUi.refresh();
-}
-async function loadTools() {
-  await toolsUi.refresh();
 }
 async function loadOrg() {
   await orgUi.refresh();
@@ -291,10 +340,16 @@ navButtons.forEach((btn) => {
   btn.addEventListener("click", () => showPage(btn.dataset.page));
 });
 
+document.getElementById("add-requirements").addEventListener("click", () => requirementsUi.openForm());
+document.getElementById("add-tools").addEventListener("click", () => toolsUi.openForm({kind: "tool"}));
+document.getElementById("add-org").addEventListener("click", () => orgUi.openForm({kind: "org"}));
+
 document.querySelectorAll("[data-upload]").forEach((input) => {
   input.addEventListener("change", async () => {
     const status = document.querySelector(`[data-upload-status="${input.dataset.upload}"]`);
     const file = input.files && input.files[0];
+    const visit = registryVisit;
+    const showStatus = () => input.dataset.upload !== "registry" || visit === registryVisit;
     if (!file) {
       status.textContent = "Файл не выбран";
       return;
@@ -308,13 +363,15 @@ document.querySelectorAll("[data-upload]").forEach((input) => {
         ? (/\.(db|sqlite|sqlite3)$/i.test(file.name) ? "ru-software-sqlite" : "ru-software")
         : "bundle";
       const report = await SZI.request(`/api/admin/import/${importer}`, { method: "POST", body: data });
-      status.textContent = `Загружено: ${report.imported}. Ошибок: ${report.errors.length}. ` + report.errors.slice(0, 3).join("; ");
-      if (input.dataset.upload === "registry") await loadRegistry();
-      if (input.dataset.upload === "tools") await loadTools();
+      if (showStatus()) {
+        status.textContent = `Загружено: ${report.imported}. Ошибок: ${report.errors.length}.`;
+        if (report.errors.length) status.textContent += " " + report.errors.slice(0, 3).join("; ");
+      }
+      if (input.dataset.upload === "registry") { registryOffset = 0; await loadRegistry(); }
       if (input.dataset.upload === "org") await loadOrg();
       if (input.dataset.upload === "requirements") await loadRequirements();
     } catch (err) {
-      status.textContent = err.message;
+      if (showStatus()) status.textContent = err.message;
     } finally {
       input.disabled = false;
       input.value = "";
@@ -327,35 +384,11 @@ document.getElementById("logout").addEventListener("click", async () => {
   window.location.replace("/");
 });
 
-document.getElementById("export-btn").addEventListener("click", async () => {
-  const preview = document.getElementById("export-preview");
-  try {
-    const data = await SZI.request("/api/admin/export");
-    const text = JSON.stringify(data, null, 2);
-    preview.textContent = text;
-    preview.classList.remove("hidden");
-    const blob = new Blob([text], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "szi-bundle.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    preview.classList.remove("hidden");
-    preview.textContent = err.message;
-  }
-});
-
-document.getElementById("add-requirements").addEventListener("click", () => requirementsUi.openForm());
-document.getElementById("add-tools").addEventListener("click", () => toolsUi.openForm({ kind: "tool" }));
-document.getElementById("add-org").addEventListener("click", () => orgUi.openForm({ kind: "org" }));
-
 let registryOffset = 0;
 let registryQuery = "";
 let priceTimer;
 let registryState = "active";
-let registrySort = "reg_number";
+let registrySort = "name";
 let registryDirection = "asc";
 let registryRequest = 0;
 
@@ -367,9 +400,9 @@ function registryParams() {
 function sourceLink(url, label) {
   try {
     const parsed = new URL(url);
-    if (!["https:", "http:"].includes(parsed.protocol)) return "—";
+    if (!["https:", "http:"].includes(parsed.protocol)) return esc(label);
     return `<a href="${esc(parsed.href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
-  } catch { return "—"; }
+  } catch { return esc(label); }
 }
 
 async function loadRegistry() {
@@ -379,28 +412,69 @@ async function loadRegistry() {
     const params = registryParams();
     params.set("offset", registryOffset);
     params.set("limit", 50);
+    if (!root.innerHTML) root.textContent = "Загрузка средств…";
     root.setAttribute("aria-busy", "true");
-    const data = await SZI.request(`/api/admin/registry?${params}`);
+    const data = await SZI.request(`/api/admin/tools?${params}`);
     if (request !== registryRequest) return;
-    const columns = [["reg_number", "Номер"], ["name", "ПО"], ["owner", "Правообладатель"],
-      ["status", "Статус"], ["value", "Стоимость, руб."], ["source", "Источник"]];
+    if (registryOffset && registryOffset >= data.total) {
+      registryOffset = Math.max(0, Math.floor((data.total - 1) / 50) * 50);
+      return loadRegistry();
+    }
+    const columns = [["name", "Название"], ["covers", "Закрывает"], ["owner", "Правообладатель"],
+      ["value", "Стоимость, руб."]];
     const headers = columns.map(([key, title]) => `<button type="button" class="sort-column" data-sort="${key}"
       aria-label="Сортировать: ${title}" title="Сортировка по возрастанию / убыванию">${title} ${registrySort === key ? (registryDirection === "asc" ? "↑" : "↓") : "↕"}</button>`);
-    root.innerHTML = table(headers,
-      data.items.map(({ record: r, price: p, source_url: url }) => `<tr>
-        <td>${esc(r.reg_number)}</td><td>${esc(r.name)}</td><td>${esc(r.owner)}</td>
-        <td>${r.exclusion_date ? `Исключено: ${esc(r.exclusion_date)}` : "В реестре"}</td>
-        <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "-"}</td>
-        <td>${sourceLink(url, "Источник")}</td></tr>`));
+    root.innerHTML = table([...headers, ""],
+      data.items.map(({ item, record: r, price: p, manual_price: manual, source_url: url }) => `<tr>
+        <td>${sourceLink(url, item.name)}</td><td>${esc(item.covers.join(", "))}</td><td>${esc(item.vendor)}</td>
+        <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
+          ${r ? `<button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
+            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button>` : ""}</td>
+        <td class="row-actions">
+          <button class="btn secondary" data-edit data-id="${esc(item.id)}">Изменить</button>
+          <button class="btn danger" data-delete data-id="${esc(item.id)}">Удалить</button>
+        </td></tr>`));
     root.removeAttribute("aria-busy");
     document.getElementById("registry-count").textContent = data.total ? `${registryOffset + 1}–${Math.min(registryOffset + 50, data.total)} из ${data.total}` : "Реестр пока пуст";
     document.getElementById("registry-prev").disabled = registryOffset === 0;
     document.getElementById("registry-next").disabled = registryOffset + 50 >= data.total;
-    document.getElementById("registry-excel").href = `/api/admin/registry/export.xlsx?${registryParams()}`;
   } catch (err) { renderError(root, err); }
 }
 
+const priceDialog = document.getElementById("registry-price-dialog");
+const priceForm = document.getElementById("registry-price-form");
+const priceValue = document.getElementById("registry-price-value");
+const priceError = document.getElementById("registry-price-error");
+
+priceForm.addEventListener("submit", async event => {
+  if (event.submitter?.formMethod === "dialog") return;
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  priceError.textContent = "";
+  try {
+    await SZI.request(`/api/admin/registry/${priceForm.dataset.number}/price`, {
+      method: "PUT",
+      body: JSON.stringify({value: priceValue.value === "" ? null : priceValue.valueAsNumber}),
+    });
+    priceDialog.close();
+    await loadRegistry();
+  } catch (error) {
+    priceError.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
 document.getElementById("registry-table").addEventListener("click", event => {
+  const editPrice = event.target.closest("[data-price-number]");
+  if (editPrice) {
+    priceForm.dataset.number = editPrice.dataset.priceNumber;
+    priceValue.value = editPrice.dataset.priceValue;
+    priceError.textContent = "";
+    priceDialog.showModal();
+    return;
+  }
   const button = event.target.closest("[data-sort]");
   if (!button) return;
   registryDirection = registrySort === button.dataset.sort && registryDirection === "asc" ? "desc" : "asc";
@@ -419,24 +493,25 @@ document.querySelectorAll("[data-registry-state]").forEach(button => {
     loadRegistry();
   });
 });
+const downloadDialog = document.getElementById("registry-download-dialog");
+document.getElementById("registry-download").addEventListener("click", () => downloadDialog.showModal());
 document.querySelectorAll("[data-official-format]").forEach(control => control.addEventListener("click", async event => {
   const button = event.currentTarget;
   const status = document.getElementById("registry-download-status");
   const format = button.dataset.officialFormat;
+  const visit = registryVisit;
   button.disabled = true;
+  downloadDialog.close();
   status.textContent = `Скачивание ${format.toUpperCase()} с сайта реестра…`;
   try {
-    const response = await fetch(`/api/admin/registry/download/${format}`, { credentials: "same-origin" });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Не удалось скачать выгрузку");
-    }
-    const url = URL.createObjectURL(await response.blob());
-    const a = document.createElement("a");
-    a.href = url; a.download = `registry.${format}`; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    status.textContent = `${format.toUpperCase()} скачан.`;
-  } catch (error) { status.textContent = error.message; }
+    const result = await SZI.request(`/api/admin/registry/download/${format}`, {method: "POST"});
+    if (visit !== registryVisit) return;
+    status.textContent = result.cached
+      ? `Последняя сохранённая выгрузка: ${result.path}`
+      : `Файл сохранён: ${result.path}`;
+  } catch (error) {
+    if (visit === registryVisit) status.textContent = error.message;
+  }
   finally { button.disabled = false; }
 }));
 
@@ -450,36 +525,134 @@ document.getElementById("registry-prev").addEventListener("click", () => { regis
 document.getElementById("registry-next").addEventListener("click", () => { registryOffset += 50; loadRegistry(); });
 
 async function pollPrices() {
+  if (activePage !== "tools") return;
+  const visit = registryVisit;
   clearTimeout(priceTimer);
   try {
     const job = await SZI.request("/api/admin/registry/prices/status");
-    const running = job.status === "running";
-    document.getElementById("collect-prices").disabled = running;
-    document.getElementById("retry-prices").disabled = running;
-    document.getElementById("refresh-prices").disabled = running;
-    document.getElementById("price-progress").textContent = job.status === "idle" ? "" :
-      `${running ? "Обработка" : job.status === "failed" ? "Сбой" : "Завершено"}: ${job.done}/${job.total}, ошибок: ${job.errors}. ${job.message || ""}`;
+    if (visit !== registryVisit) return;
+    const running = ["running", "stopping"].includes(job.status);
+    if (running) showPriceResult = true;
+    const collectButton = document.getElementById("collect-prices");
+    const stopButton = document.getElementById("stop-prices");
+    if (collectButton) collectButton.disabled = running;
+    if (stopButton) stopButton.disabled = job.status !== "running";
+    document.getElementById("price-progress").textContent = job.status === "idle" || !showPriceResult ? "" :
+      `${({running: "Обработка", stopping: "Остановка", stopped: "Остановлено", failed: "Сбой", completed: "Завершено"})[job.status]}: ${job.done}/${job.total}, ошибок: ${job.errors}. ${job.message || ""}`;
     if (running) priceTimer = setTimeout(pollPrices, 2000);
-    else if (job.status !== "idle") await loadRegistry();
-  } catch (err) { document.getElementById("price-progress").textContent = err.message; }
+    else if (job.status !== "idle" && showPriceResult) await loadRegistry();
+  } catch (err) {
+    if (visit === registryVisit) document.getElementById("price-progress").textContent = err.message;
+  }
 }
 
-async function startPrices(retry, refresh = false) {
-  document.getElementById("collect-prices").disabled = true;
-  document.getElementById("retry-prices").disabled = true;
-  document.getElementById("refresh-prices").disabled = true;
+document.getElementById("collect-prices").addEventListener("click", async event => {
+  const visit = registryVisit;
+  showPriceResult = true;
+  event.currentTarget.disabled = true;
   try {
-    await SZI.request(`/api/admin/registry/prices?retry=${retry}&refresh=${refresh}`, { method: "POST" });
-  } catch (err) { showFlash(document.getElementById("page-registry"), err.message); }
-  await pollPrices();
+    await SZI.request("/api/admin/registry/prices", {method: "POST"});
+  } catch (error) {
+    if (visit === registryVisit) showFlash(document.getElementById("page-tools"), error.message);
+  }
+  if (activePage === "tools") await pollPrices();
+});
+document.getElementById("stop-prices")?.addEventListener("click", async event => {
+  const visit = registryVisit;
+  showPriceResult = true;
+  event.currentTarget.disabled = true;
+  try {
+    await SZI.request("/api/admin/registry/prices/stop", {method: "POST"});
+  } catch (error) {
+    if (visit === registryVisit) showFlash(document.getElementById("page-tools"), error.message);
+  }
+  if (activePage === "tools") await pollPrices();
+});
+
+const adminProfileForm = document.getElementById("admin-profile-form");
+
+async function loadAdminProfile() {
+  try {
+    const [user, users] = await Promise.all([SZI.me(), SZI.request("/api/admin/users")]);
+    adminProfileForm.elements.login.value = user.login;
+    document.getElementById("admin-users").innerHTML = table(
+      ["Логин", "Роль", ""],
+      users.map(entry => `<tr><td>${esc(entry.login)}</td><td>${entry.role === "admin" ? "Администратор" : "Пользователь"}</td>
+        <td>${entry.id === user.id ? "" : `<button class="btn secondary" type="button"
+          data-user-id="${entry.id}" data-user-role="${esc(entry.role)}"
+          data-user-login="${esc(entry.login)}">Изменить</button>`}</td></tr>`),
+    );
+  } catch (error) {
+    showFlash(document.getElementById("page-profile"), error.message);
+  }
 }
-document.getElementById("collect-prices").addEventListener("click", () => startPrices(false));
-document.getElementById("retry-prices").addEventListener("click", () => startPrices(true));
-document.getElementById("refresh-prices").addEventListener("click", () => startPrices(false, true));
+
+document.getElementById("admin-profile").addEventListener("click", () => showPage("profile"));
+adminProfileForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(adminProfileForm));
+  values.login = values.login.trim();
+  values.new_password ||= null;
+  const button = event.submitter;
+  button.disabled = true;
+  try {
+    await SZI.request("/api/admin/profile", {method: "PUT", body: JSON.stringify(values)});
+    adminProfileForm.reset();
+    if (values.new_password) {
+      window.location.assign("/");
+      return;
+    }
+    await loadAdminProfile();
+    showFlash(document.getElementById("page-profile"), "Профиль сохранён.", true);
+  } catch (error) {
+    showFlash(document.getElementById("page-profile"), error.message);
+  } finally {
+    adminProfileForm.elements.current_password.value = "";
+    button.disabled = false;
+  }
+});
+
+const adminUserDialog = document.getElementById("admin-user-dialog");
+const adminUserForm = document.getElementById("admin-user-form");
+const adminUserError = document.getElementById("admin-user-error");
+
+document.getElementById("admin-users").addEventListener("click", event => {
+  const button = event.target.closest("[data-user-id]");
+  if (!button) return;
+  adminUserForm.reset();
+  adminUserForm.dataset.userId = button.dataset.userId;
+  adminUserForm.elements.role.value = button.dataset.userRole;
+  document.getElementById("admin-user-title").textContent = `Настройки: ${button.dataset.userLogin}`;
+  adminUserError.textContent = "";
+  adminUserDialog.showModal();
+});
+adminUserDialog.addEventListener("close", () => adminUserForm.reset());
+adminUserForm.addEventListener("submit", async event => {
+  if (event.submitter?.formMethod === "dialog") return;
+  event.preventDefault();
+  const button = event.submitter;
+  const values = Object.fromEntries(new FormData(adminUserForm));
+  values.new_password ||= null;
+  button.disabled = true;
+  adminUserError.textContent = "";
+  try {
+    await SZI.request(`/api/admin/users/${adminUserForm.dataset.userId}`, {
+      method: "PUT",
+      body: JSON.stringify(values),
+    });
+    adminUserDialog.close();
+    await loadAdminProfile();
+    showFlash(document.getElementById("page-profile"), "Настройки пользователя сохранены.", true);
+  } catch (error) {
+    adminUserError.textContent = error.message;
+  } finally {
+    adminUserForm.elements.current_password.value = "";
+    button.disabled = false;
+  }
+});
 
 (async () => {
   const user = await SZI.requireAdmin();
   if (!user) return;
-  document.getElementById("who").textContent = `${user.login} · администратор`;
   showPage("dashboard");
 })();

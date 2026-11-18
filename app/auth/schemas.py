@@ -29,6 +29,18 @@ class UserDraft(BaseModel):
     budget: str = "500000"
 
 
+class AdminProfileUpdate(BaseModel):
+    login: str = Field(min_length=3, max_length=64, pattern=r"^\S(?:.*\S)?$")
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str | None = Field(default=None, min_length=8, max_length=128)
+
+
+class AdminUserUpdate(BaseModel):
+    role: Literal["admin", "user"]
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str | None = Field(default=None, min_length=8, max_length=128)
+
+
 class AuthUser(BaseModel):
     id: int
     login: str

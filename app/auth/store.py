@@ -71,6 +71,60 @@ class AuthStore:
             ).fetchone()
         return User(id=row["id"], login=login, role="user") if row else None
 
+    def list_users(self) -> list[User]:
+        with self._db() as con:
+            return [
+                User(id=row["id"], login=row["login"], role=row["role"])
+                for row in con.execute("SELECT id, login, role FROM users ORDER BY login")
+            ]
+
+    def update_user(
+        self,
+        admin_id: int,
+        user_id: int,
+        current_password: str,
+        role: Role,
+        new_password: str | None,
+    ) -> User | Literal[False] | None:
+        with self._db() as con:
+            con.execute("BEGIN IMMEDIATE")
+            admin = con.execute(
+                "SELECT password_hash FROM users WHERE id = ? AND role = 'admin'", (admin_id,)
+            ).fetchone()
+            if admin is None or not verify_password(current_password, admin["password_hash"]):
+                return False
+            row = con.execute(
+                "SELECT login, role, password_hash FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            if row["role"] != role or new_password:
+                password_hash = (
+                    hash_password(new_password) if new_password else row["password_hash"]
+                )
+                con.execute(
+                    "UPDATE users SET role = ?, password_hash = ? WHERE id = ?",
+                    (role, password_hash, user_id),
+                )
+                con.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            return User(id=user_id, login=row["login"], role=role)
+
+    def update_profile(
+        self, user: User, login: str, current_password: str, new_password: str | None
+    ) -> bool:
+        with self._db() as con:
+            row = con.execute("SELECT password_hash FROM users WHERE id = ?", (user.id,)).fetchone()
+            if row is None or not verify_password(current_password, row["password_hash"]):
+                return False
+            password_hash = hash_password(new_password) if new_password else row["password_hash"]
+            updated = con.execute(
+                "UPDATE users SET login = ?, password_hash = ? WHERE id = ? AND password_hash = ?",
+                (login, password_hash, user.id, row["password_hash"]),
+            )
+            if updated.rowcount and new_password:
+                con.execute("DELETE FROM sessions WHERE user_id = ?", (user.id,))
+            return updated.rowcount > 0
+
     def read_draft(self, user_id: int) -> str | None:
         with self._db() as con:
             row = con.execute("SELECT data FROM drafts WHERE user_id = ?", (user_id,)).fetchone()
