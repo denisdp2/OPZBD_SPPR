@@ -50,6 +50,7 @@ from app.core.models import (
     Solution,
 )
 from app.core.problem import ScenarioError, build_problem
+from app.evaluation import evaluate as evaluate_problem
 from app.importers.registry_download import download_registry_export, download_registry_xml
 from app.importers.service import RegistryService
 from app.optimization import UnknownOptimizer, get_optimizer
@@ -174,8 +175,12 @@ def create_app(
     # ------------------------------------------------------------------ #
     @api.post("/evaluate", tags=["decision"])
     def evaluate(scenario: Scenario) -> EvaluationResult:
-        """Оценка набора: закрыты ли обязательные требования, стоимость."""
-        raise not_implemented()
+        """Оценить покрытие и стоимость выбранного пользователем набора."""
+        try:
+            problem = build_problem(scenario, repo)
+        except ScenarioError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return evaluate_problem(problem)
 
     def problem_from(req: OptimizeRequest):
         try:
