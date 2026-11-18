@@ -902,7 +902,8 @@ function bindEvents() {
     state.periodMonths = value;
     event.target.value = String(value);
     invalidateResults();
-    renderAll();
+    renderOverview();
+    updateBuilderSummary();
   });
   $("#requirements-list").addEventListener("change", onRequirementChange);
   let requirementSearchTimer;

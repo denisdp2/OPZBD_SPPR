@@ -1,7 +1,6 @@
 """HTTP API. Справочники и импорт работают через интерфейс Repository.
 
-Оценка выбранного набора пока не подключена. Подбор набора идёт через алгоритмы
-из app.optimization. Описание API: /docs.
+Подбор набора идёт через алгоритмы из app.optimization. Описание API: /docs.
 """
 
 import asyncio
@@ -56,7 +55,7 @@ from app.core.models import (
     Scenario,
     Solution,
 )
-from app.core.problem import ScenarioError, build_problem
+from app.core.problem import ScenarioError, build_problem, evaluate_problem
 from app.importers.registry_download import download_registry_export, download_registry_xml
 from app.importers.service import RegistryService
 from app.optimization import UnknownOptimizer, get_optimizer
@@ -65,10 +64,6 @@ from app.optimization.cancel import OptimizationCancelled, bind, reset
 from app.storage.registry import RegistryStore
 from app.storage.registry_export import export_registry_xlsx
 from app.storage.sqlite import SQLiteRepository
-
-
-def not_implemented() -> HTTPException:
-    return HTTPException(status_code=501, detail="Ещё не реализовано")
 
 
 class ManualRegistryPrice(BaseModel):
@@ -186,11 +181,11 @@ def create_app(
     @api.post("/evaluate", tags=["decision"])
     def evaluate(scenario: Scenario) -> EvaluationResult:
         """Оценка набора: закрыты ли обязательные требования, стоимость."""
-        raise not_implemented()
+        return evaluate_problem(problem_from(scenario))
 
-    def problem_from(req: OptimizeRequest):
+    def problem_from(scenario: Scenario):
         try:
-            return build_problem(req.scenario, repo)
+            return build_problem(scenario, repo)
         except ScenarioError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -231,7 +226,7 @@ def create_app(
             raise HTTPException(
                 status_code=422, detail="Для режима максимального покрытия нужен бюджет"
             )
-        problem = problem_from(req)
+        problem = problem_from(req.scenario)
         optimizer = optimizer_from(req.algorithm)
         event, wrapped = run_cancellable(lambda: optimizer.solve(problem, req.mode, req.budget))
         try:
@@ -247,7 +242,7 @@ def create_app(
     @api.post("/pareto", tags=["decision"])
     async def pareto(req: OptimizeRequest) -> list[Solution]:
         """Парето-фронт «стоимость / число закрытых требований»."""
-        problem = problem_from(req)
+        problem = problem_from(req.scenario)
         optimizer = optimizer_from(req.algorithm)
         event, wrapped = run_cancellable(lambda: optimizer.pareto(problem))
         try:

@@ -7,7 +7,7 @@
   <meta name="description" content="Вход в учётную запись">
   <title>Вход</title>
   <link rel="stylesheet" href="/static/assets/css/auth.css?v=simple-1">
-  <script type="module" src="/static/assets/js/pages/auth-page.js"></script>
+  <script type="module" src="/static/assets/js/pages/auth-page.js?v=qa-1"></script>
 </head>
 <body>
   <main class="page-shell">
@@ -72,16 +72,9 @@
           <button class="back-link" type="button" data-view="login"> Назад ко входу</button>
           <div class="form-intro">
             <h2 id="forgot-title">Забыли пароль?</h2>
-            <p>Укажите логин для восстановления доступа.</p>
+            <p>Обратитесь к администратору и сообщите свой логин. Администратор сможет задать новый пароль.</p>
           </div>
-          <form id="forgot-form" novalidate>
-            <label class="field-label" for="forgot-name">Логин</label>
-            <div class="input-wrap">
-              <input id="forgot-name" name="login" type="text" placeholder="Введите логин" autocomplete="username" required maxlength="64">
-            </div>
-            <button class="submit-button" type="submit"><span>Восстановить доступ</span></button>
-            <div class="form-message" id="forgot-message" role="status" aria-live="polite" hidden></div>
-          </form>
+
         </section>
       </div>
     </section>

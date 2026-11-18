@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.core.cover import expand_covers
 from app.core.interfaces import NotFoundError, Repository
-from app.core.models import Problem, Scenario, Solution
+from app.core.models import EvaluationResult, Problem, Scenario, Solution
 
 
 class ScenarioError(ValueError):
@@ -67,6 +67,27 @@ def build_problem(scenario: Scenario, repo: Repository) -> Problem:
         items=items,
         costs=costs,
         period_months=scenario.period_months,
+    )
+
+
+def evaluate_problem(problem: Problem) -> EvaluationResult:
+    covered_by: dict[str, list[str]] = {}
+    for item in problem.items:
+        for requirement in item.covers:
+            covered_by.setdefault(requirement, []).append(item.id)
+    mandatory = set(problem.mandatory)
+    covered = [key for key in problem.requirements if key in covered_by]
+    uncovered = [key for key in problem.requirements if key not in covered_by]
+    uncovered_mandatory = [key for key in problem.mandatory if key not in covered_by]
+    return EvaluationResult(
+        all_mandatory_covered=not uncovered_mandatory,
+        uncovered_mandatory=uncovered_mandatory,
+        covered=covered,
+        uncovered=uncovered,
+        covered_optional=sum(key not in mandatory for key in covered),
+        total_optional=len(problem.requirements) - len(mandatory),
+        total_cost=sum(problem.costs.values()),
+        covered_by=covered_by,
     )
 
 
