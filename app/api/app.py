@@ -55,7 +55,8 @@ from app.core.models import (
     Scenario,
     Solution,
 )
-from app.core.problem import ScenarioError, build_problem, evaluate_problem
+from app.core.problem import ScenarioError, build_problem
+from app.evaluation import evaluate as evaluate_problem
 from app.importers.registry_download import download_registry_export, download_registry_xml
 from app.importers.service import RegistryService
 from app.optimization import UnknownOptimizer, get_optimizer
@@ -180,7 +181,7 @@ def create_app(
     # ------------------------------------------------------------------ #
     @api.post("/evaluate", tags=["decision"])
     def evaluate(scenario: Scenario) -> EvaluationResult:
-        """Оценка набора: закрыты ли обязательные требования, стоимость."""
+        """Оценить покрытие и стоимость выбранного пользователем набора."""
         return evaluate_problem(problem_from(scenario))
 
     def problem_from(scenario: Scenario):

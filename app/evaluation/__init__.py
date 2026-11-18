@@ -1,5 +1,8 @@
-"""Оценка выбранного набора (кнопка «Оценить»).
+"""Оценка выбранного набора (кнопка «Рассчитать»).
 
-Ответственная: Ульяна.
-Вход — app.core.models.Problem, выход — app.core.models.EvaluationResult.
+Вход — ``app.core.models.Problem``, выход — ``app.core.models.EvaluationResult``.
 """
+
+from app.evaluation.evaluator import evaluate
+
+__all__ = ["evaluate"]
