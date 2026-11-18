@@ -195,6 +195,25 @@ th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transfor
 
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
 
+.registry-actions {
+  align-items: center;
+}
+
+.registry-actions > .btn {
+  width: 13rem;
+  max-width: 100%;
+  height: 44px;
+  margin: 0;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.registry-actions > .btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .upload-bar {
   align-items: center;
   margin-bottom: 16px;
@@ -228,6 +247,84 @@ th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transfor
 .sort-column:focus-visible { outline: 2px solid var(--accent, #15344c); outline-offset: 3px; }
 #registry-table { overflow-x: auto; }
 #registry-table td { overflow-wrap: anywhere; }
-#registry-table td:nth-child(5) { white-space: nowrap; }
+#registry-table td:nth-child(4) { white-space: nowrap; }
 #registry-table[aria-busy="true"] { opacity: .65; }
 button:disabled { cursor: wait; opacity: .55; }
+
+.main { min-width: 0; }
+
+#page-tools > .card,
+#page-tools > .toolbar,
+#registry-table {
+  margin-bottom: 16px;
+}
+
+.registry-control-card {
+  display: grid;
+  gap: 16px;
+}
+
+.registry-control-card [role="status"]:empty { display: none; }
+.registry-control-card [role="status"] { overflow-wrap: anywhere; }
+.registry-actions { gap: 12px; }
+.registry-actions #price-progress { flex-basis: 100%; }
+
+#registry-table table { min-width: 650px; }
+#registry-table td:nth-child(1) { min-width: 165px; }
+#registry-table td:nth-child(3) { min-width: 125px; }
+
+.registry-edit-price {
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin-left: 4px;
+  cursor: pointer;
+  color: var(--navy);
+  background: transparent;
+}
+
+.registry-edit-price:hover { background: #e8eef5; }
+#registry-price-form > .toolbar { margin-top: 16px; }
+
+.side {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+}
+.side nav { min-height: 0; overflow-y: auto; }
+.admin-account {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+}
+.admin-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #345471;
+}
+.admin-profile-form { max-width: 520px; }
+.admin-profile-form > button { margin-top: 16px; }
+@media (max-width: 860px) {
+  .side { z-index: 2; height: auto; max-height: 45dvh; }
+}
+
+#registry-table .row-actions { min-width: 164px; white-space: nowrap; }
+#registry-table .row-actions .btn {
+  flex: none;
+  padding: 7px 9px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+#admin-user-dialog { width: min(440px, calc(100% - 32px)); }
+#admin-user-form > .toolbar { margin-top: 16px; }
+#page-export a.btn { text-decoration: none; }
+
+.catalog-controls { justify-content: space-between; align-items: center; }
+.upload-bar > .btn, .catalog-controls .btn { min-height: 42px; font: inherit; }
+.upload-bar .upload-status:empty { display: none; }
+#req-table > form, #org-table > form { margin-bottom: 16px; }
+
+.catalog-add, #req-form, #tool-form, #org-form { margin-bottom: 16px; }

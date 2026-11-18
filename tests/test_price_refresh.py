@@ -66,7 +66,7 @@ def test_refresh_processes_all_250_links_in_batches(client, monkeypatch):
     assert results[253]["value"] == 10
 
 
-def test_normal_collection_still_limits_each_run_and_continues(client, monkeypatch):
+def test_normal_collection_processes_all_new_links(client, monkeypatch):
     store = client.app.state.registry.store
     store.upsert(
         [
@@ -82,7 +82,34 @@ def test_normal_collection_still_limits_each_run_and_continues(client, monkeypat
 
     monkeypatch.setattr("app.importers.service.collect_price", collect)
     client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
-    for expected in (100, 100, 50, 0):
+    for expected in (250, 0):
         response = client.post("/api/admin/registry/prices?limit=100")
         assert response.json()["total"] == expected
     assert len(calls) == len(set(calls)) == 250
+
+
+def test_stop_preserves_processed_links(client, monkeypatch):
+    service = client.app.state.registry
+    service.store.upsert(
+        [
+            RegistryRecord(reg_number=n, name=f"ПО {n}", cost_url=f"https://example.org/{n}")
+            for n in range(1, 4)
+        ]
+    )
+
+    async def collect(client, url):
+        service.stop()
+        return PriceResult(status="ok", value=100, parser_version=PARSER_VERSION)
+
+    monkeypatch.setattr("app.importers.service.collect_price", collect)
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    url = "/api/admin/registry/prices"
+    assert client.post(f"{url}?limit=1").status_code == 202
+    assert client.get(f"{url}/status").json() == {
+        "status": "stopped",
+        "total": 3,
+        "done": 1,
+        "errors": 0,
+    }
+    assert client.post(f"{url}?limit=1").json()["total"] == 2
+    assert client.post(f"{url}/stop").json()["status"] == "stopped"

@@ -4,7 +4,7 @@ import asyncio
 from collections import defaultdict
 from itertools import islice
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 from urllib.parse import urlsplit
 
 import httpx
@@ -22,6 +22,7 @@ class RegistryService:
     def __init__(self, repo: Repository, store: RegistryStore):
         self.repo, self.store = repo, store
         self.lock = Lock()
+        self.stop_requested = Event()
         self.job = {"status": "idle", "total": 0, "done": 0, "errors": 0}
 
     def import_file(self, path: Path) -> ImportReport:
@@ -55,7 +56,7 @@ class RegistryService:
 
     def start(self, retry: bool, limit: int, refresh: bool = False) -> dict:
         with self.lock:
-            if self.job["status"] == "running":
+            if self.job["status"] in {"running", "stopping"}:
                 raise ValueError("Сбор стоимости уже выполняется")
             groups = defaultdict(list)
             entries = self.store.list_records()
@@ -88,10 +89,10 @@ class RegistryService:
                 if url in reusable:
                     cached[url].append(record["reg_number"])
                     continue
-                if refresh or url in groups or len(groups) < limit:
-                    groups[url].append(record["reg_number"])
+                groups[url].append(record["reg_number"])
             for url, numbers in cached.items():
                 self.store.save_price(numbers, PriceResult.model_validate(reusable[url]), url)
+            self.stop_requested.clear()
             self.pending = dict(groups)
             self.batch_size = limit
             self.job = {"status": "running", "total": len(groups), "done": 0, "errors": 0}
@@ -101,13 +102,20 @@ class RegistryService:
         with self.lock:
             return dict(self.job)
 
+    def stop(self) -> dict:
+        with self.lock:
+            if self.job["status"] == "running":
+                self.stop_requested.set()
+                self.job["status"] = "stopping"
+            return dict(self.job)
+
     async def run(self) -> None:
         pending = iter(self.pending.items())
         queue = asyncio.Queue()
         hosts = defaultdict(lambda: asyncio.Semaphore(2))
 
         async def worker(client):
-            while not queue.empty():
+            while not self.stop_requested.is_set() and not queue.empty():
                 url, numbers = queue.get_nowait()
                 # Даже некорректная ссылка должна давать ошибку одной записи, не всей задачи.
                 try:
@@ -115,6 +123,8 @@ class RegistryService:
                 except ValueError:
                     host = ""
                 async with hosts[host]:
+                    if self.stop_requested.is_set():
+                        return
                     result = await collect_price(client, url)
                 await asyncio.to_thread(self.store.save_price, numbers, result, url)
                 with self.lock:
@@ -131,7 +141,9 @@ class RegistryService:
                     "Accept-Language": "ru,en;q=0.8",
                 },
             ) as client:
-                while batch := list(islice(pending, self.batch_size)):
+                while not self.stop_requested.is_set() and (
+                    batch := list(islice(pending, self.batch_size))
+                ):
                     for pair in batch:
                         queue.put_nowait(pair)
                     workers = [
@@ -144,7 +156,7 @@ class RegistryService:
                             task.cancel()
                         await asyncio.gather(*workers, return_exceptions=True)
             with self.lock:
-                self.job["status"] = "completed"
+                self.job["status"] = "stopped" if self.stop_requested.is_set() else "completed"
         except Exception as exc:
             with self.lock:
                 self.job.update(status="failed", message=str(exc)[:200])
