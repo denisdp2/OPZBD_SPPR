@@ -1,9 +1,12 @@
 """HTTP API. Справочники и импорт работают через интерфейс Repository.
 
-Модуль принятия решений пока не подключён. Описание API: /docs.
+Подбор набора идёт через алгоритмы из app.optimization. Описание API: /docs.
 """
 
+import asyncio
+import json
 import sqlite3
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -25,12 +28,18 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import ValidationError
-from starlette.background import BackgroundTask
+from pydantic import BaseModel, Field, ValidationError
 
 from app import __version__, paths
-from app.auth.deps import COOKIE_NAME, current_user, require_admin
-from app.auth.schemas import AuthUser, LoginRequest
+from app.auth.deps import COOKIE_NAME, current_user, require_admin, require_login
+from app.auth.schemas import (
+    AdminProfileUpdate,
+    AdminUserUpdate,
+    AuthUser,
+    LoginRequest,
+    RegisterRequest,
+    UserDraft,
+)
 from app.auth.store import AuthStore, User
 from app.core.interfaces import NotFoundError, Repository
 from app.core.models import (
@@ -46,15 +55,20 @@ from app.core.models import (
     Scenario,
     Solution,
 )
+from app.core.problem import ScenarioError, build_problem
+from app.evaluation import evaluate as evaluate_problem
 from app.importers.registry_download import download_registry_export, download_registry_xml
 from app.importers.service import RegistryService
+from app.optimization import UnknownOptimizer, get_optimizer
+from app.optimization import list_optimizers as optimizer_catalog
+from app.optimization.cancel import OptimizationCancelled, bind, reset
 from app.storage.registry import RegistryStore
 from app.storage.registry_export import export_registry_xlsx
 from app.storage.sqlite import SQLiteRepository
 
 
-def not_implemented() -> HTTPException:
-    return HTTPException(status_code=501, detail="Ещё не реализовано")
+class ManualRegistryPrice(BaseModel):
+    value: float | None = Field(ge=0, allow_inf_nan=False)
 
 
 def create_app(
@@ -64,6 +78,7 @@ def create_app(
     app = FastAPI(title="СППР: подбор средств и мер защиты", version=__version__)
     repo = repo if repo is not None else SQLiteRepository(paths.data_dir() / "catalog.sqlite3")
     app.state.repo = repo
+    app.state.opt_cancel = None
     registry = RegistryService(repo, RegistryStore(paths.data_dir() / "catalog.sqlite3"))
     app.state.registry = registry
 
@@ -95,6 +110,29 @@ def create_app(
     # ------------------------------------------------------------------ #
     #  Вход / роли
     # ------------------------------------------------------------------ #
+    @api.post("/auth/register", status_code=201, tags=["auth"])
+    def register(body: RegisterRequest) -> AuthUser:
+        login = body.login.strip()
+        if len(login) < 3:
+            raise HTTPException(status_code=422, detail="Логин должен содержать от 3 символов")
+        user = auth.register(login, body.password)
+        if user is None:
+            raise HTTPException(status_code=409, detail="Этот логин уже занят")
+        return AuthUser(id=user.id, login=user.login, role=user.role)
+
+    @api.get("/users/{user_id}/draft", tags=["scenario"])
+    def read_draft(user_id: int, user: User = Depends(require_login)) -> UserDraft | None:
+        if user_id != user.id:
+            raise HTTPException(status_code=403, detail="Черновик принадлежит другому аккаунту")
+        data = auth.read_draft(user.id)
+        return UserDraft.model_validate_json(data) if data is not None else None
+
+    @api.put("/users/{user_id}/draft", status_code=204, tags=["scenario"])
+    def save_draft(user_id: int, draft: UserDraft, user: User = Depends(require_login)) -> None:
+        if user_id != user.id:
+            raise HTTPException(status_code=403, detail="Черновик принадлежит другому аккаунту")
+        auth.save_draft(user.id, draft.model_dump_json())
+
     @api.post("/auth/login", tags=["auth"])
     def login(body: LoginRequest, response: Response) -> AuthUser:
         user = app.state.auth.authenticate(body.login, body.password)
@@ -143,22 +181,80 @@ def create_app(
     # ------------------------------------------------------------------ #
     @api.post("/evaluate", tags=["decision"])
     def evaluate(scenario: Scenario) -> EvaluationResult:
-        """Оценка набора: закрыты ли обязательные требования, стоимость."""
-        raise not_implemented()
+        """Оценить покрытие и стоимость выбранного пользователем набора."""
+        return evaluate_problem(problem_from(scenario))
+
+    def problem_from(scenario: Scenario):
+        try:
+            return build_problem(scenario, repo)
+        except ScenarioError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    def optimizer_from(name: str):
+        try:
+            return get_optimizer(name)
+        except UnknownOptimizer as exc:
+            raise HTTPException(status_code=404, detail="Алгоритм не найден") from exc
 
     @api.get("/optimizers", tags=["decision"])
     def list_optimizers() -> list[OptimizerInfo]:
-        raise not_implemented()
+        return optimizer_catalog()
+
+    def run_cancellable(fn):
+        event = threading.Event()
+        app.state.opt_cancel = event
+
+        def wrapped():
+            token = bind(event)
+            try:
+                return fn()
+            finally:
+                reset(token)
+
+        return event, wrapped
+
+    @api.post("/optimize/cancel", tags=["decision"])
+    def cancel_optimization() -> dict:
+        event = app.state.opt_cancel
+        if event is not None:
+            event.set()
+        return {"status": "stopping"}
 
     @api.post("/optimize", tags=["decision"])
-    def optimize(req: OptimizeRequest) -> Solution:
+    async def optimize(req: OptimizeRequest) -> Solution:
         """Подбор оптимального набора выбранным алгоритмом."""
-        raise not_implemented()
+        if req.mode == "max_coverage" and req.budget is None:
+            raise HTTPException(
+                status_code=422, detail="Для режима максимального покрытия нужен бюджет"
+            )
+        problem = problem_from(req.scenario)
+        optimizer = optimizer_from(req.algorithm)
+        event, wrapped = run_cancellable(lambda: optimizer.solve(problem, req.mode, req.budget))
+        try:
+            return await asyncio.to_thread(wrapped)
+        except OptimizationCancelled as exc:
+            raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        finally:
+            if app.state.opt_cancel is event:
+                app.state.opt_cancel = None
 
     @api.post("/pareto", tags=["decision"])
-    def pareto(req: OptimizeRequest) -> list[Solution]:
+    async def pareto(req: OptimizeRequest) -> list[Solution]:
         """Парето-фронт «стоимость / число закрытых требований»."""
-        raise not_implemented()
+        problem = problem_from(req.scenario)
+        optimizer = optimizer_from(req.algorithm)
+        event, wrapped = run_cancellable(lambda: optimizer.pareto(problem))
+        try:
+            return await asyncio.to_thread(wrapped)
+        except OptimizationCancelled as exc:
+            raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=400, detail="Алгоритм не строит Парето-фронт") from exc
+        finally:
+            if app.state.opt_cancel is event:
+                app.state.opt_cancel = None
 
     # ------------------------------------------------------------------ #
     #  Администрирование
@@ -193,6 +289,10 @@ def create_app(
     @admin.delete("/items/{item_id}")
     def delete_item(item_id: str) -> dict:
         repo.delete_item(item_id)
+        number = item_id.removeprefix("ru-software-")
+        if number.isascii() and number.isdecimal() and item_id == f"ru-software-{number}":
+            if len(number) <= 18:
+                registry.store.delete_record(int(number))
         return {"status": "ok"}
 
     @admin.get("/profiles/{profile_id}")
@@ -222,7 +322,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Неизвестный импортёр")
         suffix = Path(file.filename or "").suffix.lower()
         extensions = {
-            "ru-software": {".xlsx", ".xml"},
+            "ru-software": {".xlsx", ".xls", ".xml", ".json"},
             "ru-software-sqlite": {".db", ".sqlite", ".sqlite3"},
             "bundle": {".json"},
         }
@@ -247,6 +347,15 @@ def create_app(
                                 detail="Файл превышает лимит размера выгрузки",
                             )
                         output.write(chunk)
+                if importer_name == "ru-software" and suffix == ".json":
+                    payload = json.loads(target.read_text(encoding="utf-8-sig"))
+                    if (
+                        isinstance(payload, dict)
+                        and "items" in payload
+                        and "records" not in payload
+                    ):
+                        bundle = DataBundle.model_validate(payload)
+                        return ImportReport(importer="bundle", imported=repo.import_bundle(bundle))
                 if importer_name in {"ru-software", "ru-software-sqlite"}:
                     return registry.import_file(target)
                 bundle = DataBundle.model_validate_json(target.read_bytes())
@@ -257,6 +366,87 @@ def create_app(
             raise HTTPException(status_code=422, detail="Не удалось прочитать выгрузку") from exc
         finally:
             file.file.close()
+
+    @admin.get("/users")
+    def users() -> list[AuthUser]:
+        return [
+            AuthUser(id=user.id, login=user.login, role=user.role) for user in auth.list_users()
+        ]
+
+    @admin.put("/users/{user_id}")
+    def update_user(
+        user_id: int, body: AdminUserUpdate, user: User = Depends(require_admin)
+    ) -> AuthUser:
+        if user_id == user.id:
+            raise HTTPException(status_code=409, detail="Для своего аккаунта используйте профиль")
+        result = auth.update_user(
+            user.id, user_id, body.current_password, body.role, body.new_password
+        )
+        if result is False:
+            raise HTTPException(status_code=403, detail="Неверный пароль администратора")
+        if result is None:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        return AuthUser(id=result.id, login=result.login, role=result.role)
+
+    @admin.put("/profile")
+    def update_profile(body: AdminProfileUpdate, user: User = Depends(require_admin)) -> AuthUser:
+        try:
+            applied = auth.update_profile(
+                user, body.login, body.current_password, body.new_password
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="Этот логин уже занят") from exc
+        if not applied:
+            raise HTTPException(status_code=403, detail="Неверный текущий пароль")
+        return AuthUser(id=user.id, login=body.login, role=user.role)
+
+    @admin.get("/tools")
+    def list_tools(
+        q: str = "",
+        offset: int = Query(0, ge=0),
+        limit: int = Query(50, ge=1, le=200),
+        state: Literal["active", "excluded"] = "active",
+        sort: Literal[
+            "reg_number", "id", "name", "covers", "owner", "status", "value", "source"
+        ] = "id",
+        direction: Literal["asc", "desc"] = "asc",
+    ) -> dict:
+        if isinstance(repo, SQLiteRepository) and repo.path == registry.store.path:
+            return registry.store.tools_page(q, state, sort, direction == "desc", offset, limit)
+        records = {
+            f"ru-software-{row['record']['reg_number']}": row
+            for row in registry.store.query(state="all")
+        }
+        rows = []
+        query = q.strip().casefold()
+        for item in repo.list_items(kind="tool"):
+            row = records.get(item.id, {})
+            record = row.get("record")
+            excluded = bool(record and record["exclusion_date"])
+            if excluded != (state == "excluded"):
+                continue
+            if query and query not in f"{item.id} {item.name} {item.vendor}".casefold():
+                continue
+            rows.append({**row, "item": item})
+
+        def sort_key(row):
+            item, record = row["item"], row.get("record") or {}
+            price = row.get("price") or {}
+            return {
+                "reg_number": record.get("reg_number"),
+                "id": item.id.casefold(),
+                "name": item.name.casefold(),
+                "covers": ", ".join(item.covers).casefold(),
+                "owner": item.vendor.casefold(),
+                "status": record.get("exclusion_date", ""),
+                "value": price.get("value") if price.get("status") in {"ok", "free"} else None,
+                "source": row.get("source_url") or "",
+            }[sort]
+
+        known = [row for row in rows if sort_key(row) is not None]
+        unknown = [row for row in rows if sort_key(row) is None]
+        rows = sorted(known, key=sort_key, reverse=direction == "desc") + unknown
+        return {"total": len(rows), "items": rows[offset : offset + limit]}
 
     @admin.get("/registry")
     def list_registry(
@@ -284,34 +474,46 @@ def create_app(
             headers={"Content-Disposition": 'attachment; filename="registry.xlsx"'},
         )
 
+    def save_registry_export(format: str) -> tuple[Path, bool]:
+        cache = paths.data_dir() / "registry-cache" / f"registry.{format}"
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            with TemporaryDirectory(dir=cache.parent) as directory:
+                target = Path(directory) / cache.name
+                if format == "xml":
+                    download_registry_xml(target)
+                else:
+                    download_registry_export(target, format)
+                target.replace(cache)
+            return cache, False
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            if cache.is_file():
+                return cache, True
+            message = "Не удалось сохранить выгрузку реестра."
+            if "CERTIFICATE_VERIFY_FAILED" in str(exc):
+                message += " Сертификат сайта не доверен этой системе."
+            raise HTTPException(status_code=502, detail=message) from exc
+
+    @admin.post("/registry/download/{format}")
+    def save_official(format: Literal["xml", "xls"]) -> dict:
+        path, cached = save_registry_export(format)
+        return {"path": str(path.resolve()), "cached": cached}
+
     @admin.get("/registry/download/{format}")
     def download_official(format: Literal["xml", "html", "xls"]):
-        directory = TemporaryDirectory()
-        try:
-            target = Path(directory.name) / f"registry.{format}"
-            target = (
-                download_registry_xml(target)
-                if format == "xml"
-                else download_registry_export(target, format)
-            )
-            return FileResponse(
-                target,
-                filename=f"registry.{format}",
-                media_type={
-                    "xml": "application/xml",
-                    "html": "text/html",
-                    "xls": "application/vnd.ms-excel",
-                }[format],
-                background=BackgroundTask(directory.cleanup),
-            )
-        except (httpx.HTTPError, ValueError, OSError) as exc:
-            directory.cleanup()
-            message = "Не удалось скачать выгрузку с официального сайта. "
-            if "CERTIFICATE_VERIFY_FAILED" in str(exc):
-                message += "Сертификат сайта не доверен этой системе."
-            else:
-                message += str(exc)[:250]
-            raise HTTPException(status_code=502, detail=message) from exc
+        path, cached = save_registry_export(format)
+        return FileResponse(
+            path, filename=path.name, headers={"X-Registry-Source": "cache"} if cached else {}
+        )
+
+    @admin.put("/registry/{number}/price", status_code=204)
+    def update_registry_price(number: int, body: ManualRegistryPrice) -> None:
+        if not registry.store.set_manual_price(number, body.value):
+            raise HTTPException(status_code=404, detail="Запись не найдена")
+
+    @admin.post("/registry/prices/stop")
+    def stop_prices() -> dict:
+        return registry.stop()
 
     @admin.post("/registry/prices", status_code=202)
     def start_prices(
@@ -320,7 +522,7 @@ def create_app(
         refresh: bool = False,
         limit: int = Query(100, ge=1, le=1000),
     ) -> dict:
-        """При refresh=true limit задаёт размер порции полного пересчёта, иначе лимит задачи."""
+        """Параметр limit задаёт размер порции, а не общий объём задачи."""
         try:
             result = registry.start(retry, limit, refresh)
         except ValueError as exc:
@@ -333,7 +535,18 @@ def create_app(
         return registry.status()
 
     @admin.get("/export")
-    def export() -> DataBundle:
+    def export(
+        response: Response,
+        part: Literal["all", "requirements", "tools", "org"] = "all",
+        download: bool = False,
+    ) -> DataBundle:
+        if download:
+            filename = "szi-bundle.json" if part == "all" else f"szi-{part}.json"
+            response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        if part == "requirements":
+            return DataBundle(requirements=repo.list_requirements())
+        if part in {"tools", "org"}:
+            return DataBundle(items=repo.list_items(kind="tool" if part == "tools" else "org"))
         return repo.export_bundle()
 
     app.include_router(api)

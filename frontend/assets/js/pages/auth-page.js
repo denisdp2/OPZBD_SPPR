@@ -76,7 +76,7 @@ async function runFormAction(form, formId, action, onSuccess) {
 
 for (const control of document.querySelectorAll("[data-view]")) {
   control.addEventListener("click", () => {
-    ["login", "register", "forgot"].forEach(clearMessage);
+    ["login", "register"].forEach(clearMessage);
     showView(control.dataset.view);
   });
 }
@@ -116,16 +116,6 @@ document.querySelector("#register-form").addEventListener("submit", (event) => {
     showView("login");
     document.querySelector("#login-name").value = login;
     showMessage("login", result?.message || "Регистрация успешно завершена. Теперь войдите.", "success");
-  });
-});
-
-document.querySelector("#forgot-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  runFormAction(form, "forgot", () => authService.requestPasswordReset({
-    login: readField(form, "login"),
-  }), (result) => {
-    showMessage("forgot", result?.message || "Если для этого логина доступно восстановление, дальнейшие инструкции будут отправлены по настроенному каналу.", "info");
   });
 });
 

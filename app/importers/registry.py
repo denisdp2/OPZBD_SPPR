@@ -1,10 +1,14 @@
 """Разбор Excel-выгрузки реестра российского ПО без доступа к БД и сети."""
 
 import html
+import json
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree
 
+import xlrd
+from bs4 import BeautifulSoup
 from openpyxl import load_workbook
 from pydantic import BaseModel, Field, field_validator
 
@@ -28,7 +32,7 @@ COLUMNS = {
 
 class RegistryRecord(BaseModel):
     reg_number: int = Field(gt=0)
-    name: str = Field(min_length=1)
+    name: str = Field(default="", min_length=1, validate_default=True)
     alt_names: str = ""
     software_class: str = ""
     okpd: str = ""
@@ -38,6 +42,12 @@ class RegistryRecord(BaseModel):
     inn: str = ""
     decision_url: str = ""
     cost_url: str = ""
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def normalize_name(cls, value, info):
+        name = str(value or "").replace("\xa0", " ").strip()
+        return name or f"Запись №{info.data.get('reg_number', '?')} (без наименования)"
 
     @field_validator("exclusion_date", mode="before")
     @classmethod
@@ -65,52 +75,102 @@ class RegistryImporter(Importer):
     name = "ru-software"
     title = "Реестр российского ПО"
     target = "items"
-    extensions = (".xlsx", ".xml")
+    extensions = (".xlsx", ".xls", ".xml", ".json")
 
     def parse_records(self, path: Path) -> tuple[list[RegistryRecord], list[str]]:
         if path.suffix.lower() == ".xml":
             return self.parse_xml(path)
-        book = load_workbook(path, read_only=True, data_only=True)
-        records, errors, seen = [], [], set()
-        try:
-            rows = enumerate(book.active.iter_rows(values_only=True), 1)
-            indices = {}
-            for number, row in rows:
-                for index, value in enumerate(row):
-                    header = " ".join(str(value or "").split())
-                    for title, key in COLUMNS.items():
-                        if header.startswith(title[:40]):
-                            indices[key] = index
-                if "reg_number" in indices and "name" in indices:
-                    break
-                if number >= 30:
-                    raise ValueError(
-                        "Не найдены заголовки регистрационного номера и наименования ПО"
-                    )
-            if not {"reg_number", "name"} <= indices.keys():
-                raise ValueError("Пустая выгрузка или отсутствуют обязательные столбцы")
-            for number, row in rows:
-                values = {
-                    key: str(row[i]).strip() if i < len(row) and row[i] is not None else ""
-                    for key, i in indices.items()
-                }
-                raw = values.get("reg_number", "")
-                if not raw:
-                    continue
+        if path.suffix.lower() == ".json":
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+            if isinstance(payload, dict):
+                payload = payload.get("records")
+            if not isinstance(payload, list):
+                raise ValueError("JSON должен содержать список записей реестра")
+            records, errors, seen = [], [], set()
+            for index, entry in enumerate(payload, 1):
                 try:
-                    # Excel может хранить целые номера в числовых ячейках.
-                    reg = int(raw.removesuffix(".0"))
-                    if reg in seen:
-                        raise ValueError(f"повтор номера {reg}")
-                    values["reg_number"] = reg
-                    record = RegistryRecord(**values)
+                    record = RegistryRecord.model_validate(entry)
+                    if record.reg_number in seen:
+                        raise ValueError(f"повтор номера {record.reg_number}")
                     records.append(record)
-                    seen.add(reg)
+                    seen.add(record.reg_number)
                 except ValueError as exc:
-                    errors.append(f"Строка {number}: {exc}")
+                    errors.append(f"Запись {index}: {exc}")
             return records, errors
-        finally:
-            book.close()
+        with path.open("rb") as source:
+            signature = source.read(8)
+        if signature.startswith(b"PK"):
+            with path.open("rb") as source:
+                book = load_workbook(source, read_only=True, data_only=True)
+                try:
+                    return self.parse_rows(book.active.iter_rows(values_only=True))
+                finally:
+                    book.close()
+        if path.suffix.lower() == ".xls":
+            if signature.startswith(b"\xd0\xcf\x11\xe0"):
+                try:
+                    book = xlrd.open_workbook(file_contents=path.read_bytes(), on_demand=True)
+                except xlrd.XLRDError as exc:
+                    raise ValueError("Не удалось прочитать XLS") from exc
+                try:
+                    return self.parse_rows(book.sheet_by_index(0).get_rows(), xls_cells=True)
+                finally:
+                    book.release_resources()
+            content = path.read_bytes()
+            if b"urn:schemas-microsoft-com:office:spreadsheet" in content[:8192]:
+                namespace = "{urn:schemas-microsoft-com:office:spreadsheet}"
+                if b"<!DOCTYPE" in content.upper():
+                    raise ValueError("XML с DTD не поддерживается")
+                root = ElementTree.parse(BytesIO(content))
+                return self.parse_rows(
+                    [cell.findtext(namespace + "Data") for cell in row]
+                    for row in root.iter(namespace + "Row")
+                )
+            soup = BeautifulSoup(content, "html.parser")
+            return self.parse_rows(
+                [cell.get_text(" ", strip=True) for cell in row.find_all(["th", "td"])]
+                for row in soup.find_all("tr")
+            )
+        raise ValueError("Не удалось прочитать Excel")
+
+    def parse_rows(self, source, *, xls_cells=False):
+        records, errors, seen = [], [], set()
+        if xls_cells:
+            source = ([cell.value for cell in row] for row in source)
+        rows = enumerate(source, 1)
+        indices = {}
+        for number, row in rows:
+            for index, value in enumerate(row):
+                header = " ".join(str(value or "").split())
+                for title, key in COLUMNS.items():
+                    if header.startswith(title[:40]):
+                        indices[key] = index
+            if "reg_number" in indices and "name" in indices:
+                break
+            if number >= 30:
+                raise ValueError("Не найдены заголовки регистрационного номера и наименования ПО")
+        if not {"reg_number", "name"} <= indices.keys():
+            raise ValueError("Пустая выгрузка или отсутствуют обязательные столбцы")
+        for number, row in rows:
+            values = {
+                key: str(row[i]).strip() if i < len(row) and row[i] is not None else ""
+                for key, i in indices.items()
+            }
+            raw = values.get("reg_number", "")
+            if not raw:
+                continue
+            try:
+                # Excel может хранить целые номера в числовых ячейках.
+                reg = int(raw.removesuffix(".0"))
+                if reg in seen:
+                    raise ValueError(f"повтор номера {reg}")
+                values["reg_number"] = reg
+                record = RegistryRecord(**values)
+                records.append(record)
+                seen.add(reg)
+            except ValueError as exc:
+                errors.append(f"Строка {number}: {exc}")
+        return records, errors
 
     def parse_xml(self, path: Path) -> tuple[list[RegistryRecord], list[str]]:
         with path.open("rb") as source:
@@ -155,7 +215,7 @@ class RegistryImporter(Importer):
                 )
                 seen.add(number)
             except ValueError as exc:
-                errors.append(str(exc))
+                errors.append(f"Запись {text('registrationNumber')}: {exc}")
             element.clear()
         if not records:
             raise ValueError("В XML не найдены записи реестра")

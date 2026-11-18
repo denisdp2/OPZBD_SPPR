@@ -6,7 +6,6 @@ const request = (path, options = {}) => apiRequest(path, {
   baseUrl: APP_CONFIG.workspaceApiBaseUrl,
 });
 
-/** REST endpoints already declared by the FastAPI app. */
 export const workspaceApi = Object.freeze({
   health: () => request("/health"),
   requirements: () => request("/requirements"),
@@ -14,6 +13,7 @@ export const workspaceApi = Object.freeze({
   profiles: () => request("/profiles"),
   optimizers: () => request("/optimizers"),
   evaluate: (scenario) => request("/evaluate", { method: "POST", body: scenario }),
-  optimize: (payload) => request("/optimize", { method: "POST", body: payload }),
-  pareto: (payload) => request("/pareto", { method: "POST", body: payload }),
+  optimize: (payload, signal) => request("/optimize", { method: "POST", body: payload, signal }),
+  pareto: (payload, signal) => request("/pareto", { method: "POST", body: payload, signal }),
+  cancelOptimization: () => request("/optimize/cancel", { method: "POST" }),
 });

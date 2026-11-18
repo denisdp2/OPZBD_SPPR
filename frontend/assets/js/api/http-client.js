@@ -21,7 +21,6 @@ function extractMessage(payload, fallback) {
   return fallback;
 }
 
-/** Minimal JSON REST client shared by frontend API modules. */
 export async function apiRequest(path, { method = "GET", body, headers = {}, signal, baseUrl = APP_CONFIG.apiBaseUrl } = {}) {
   const normalizedBase = baseUrl.replace(/\/$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;

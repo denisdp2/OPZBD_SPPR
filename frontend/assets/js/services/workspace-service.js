@@ -71,11 +71,15 @@ export const workspaceService = Object.freeze({
     return workspaceApi.evaluate(scenario);
   },
 
-  optimize(payload) {
-    return workspaceApi.optimize(payload);
+  optimize(payload, signal) {
+    return workspaceApi.optimize(payload, signal);
   },
 
-  pareto(payload) {
-    return workspaceApi.pareto(payload);
+  pareto(payload, signal) {
+    return workspaceApi.pareto(payload, signal);
+  },
+
+  cancelOptimization() {
+    return workspaceApi.cancelOptimization();
   },
 });

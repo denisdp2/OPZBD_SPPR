@@ -1,3 +1,4 @@
+import { apiRequest } from "../api/http-client.js";
 import { workspaceApi } from "../api/workspace-api.js";
 import { workspaceService } from "../services/workspace-service.js";
 
@@ -243,20 +244,10 @@ function setLoading(button, loading, idleText) {
 }
 
 function renderApiState() {
-  const apiStatus = $("#api-status");
   const notice = $("#data-notice");
   const noticeText = $("#data-notice-text");
   const footerState = $("#footer-data-state");
   const hasCatalogGap = state.catalogsEmpty;
-  if (apiStatus) {
-    apiStatus.classList.toggle("is-online", state.serverOnline && !state.usingExamples);
-    apiStatus.classList.toggle("is-demo", state.usingExamples || hasCatalogGap);
-    const label = apiStatus.querySelector("span:last-child");
-    if (label) label.textContent = state.usingExamples
-      ? "Примерные данные"
-      : hasCatalogGap ? "Справочники не заполнены" : "Данные с сервера";
-    apiStatus.title = state.problems.join("; ") || (state.serverOnline ? "API доступно" : "Нет соединения с API");
-  }
   if (notice) {
     notice.hidden = !state.usingExamples && !hasCatalogGap;
     if (noticeText) {
@@ -355,14 +346,12 @@ function renderRequirements() {
   }
 }
 
-function miniIcon(kind) {
-  if (kind === "org") {
-    return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3.5h8l4 4v13H7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M15 3.8v4h4M10 12h6M10 15.5h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
-  }
-  return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 9h8M8 12h5M8 15h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
-}
-
 const CATALOG_PAGE_SIZE = 60;
+
+function catalogPageSize() {
+  const value = $("#catalog-page-size")?.value ?? String(CATALOG_PAGE_SIZE);
+  return value === "all" ? Number.POSITIVE_INFINITY : Number(value) || CATALOG_PAGE_SIZE;
+}
 
 function renderCatalog() {
   const list = $("#catalog-list");
@@ -394,41 +383,34 @@ function renderCatalog() {
       </div>` : (item.implement_days !== null && item.implement_days !== undefined
         ? `<div class="item-facts"><span class="item-fact">Срок внедрения: ${escapeHtml(item.implement_days)} дн.</span></div>` : "");
     return `<article class="catalog-item${selected ? " is-selected" : ""}">
-      <div class="catalog-item-icon">${miniIcon(item.kind)}</div>
       <div class="catalog-item-main">
         <div class="catalog-item-title-row"><strong class="catalog-item-title">${escapeHtml(item.name)}</strong><span class="kind-tag${item.kind === "org" ? " kind-org" : ""}">${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</span></div>
-        <p class="catalog-description">${escapeHtml(item.description || "Описание не указано.")}</p>
-        ${facts}
-        <div class="covers-label">Связанные требования</div>
-        <div class="covers-row">${covers || '<span class="cover-chip cover-chip-empty">Не сопоставлено · не влияет на покрытие</span>'}</div>
+        <details class="catalog-details">
+          <summary>Сведения</summary>
+          ${item.description ? `<p class="catalog-description">${escapeHtml(item.description)}</p>` : ""}
+          ${facts}
+          <div class="covers-row">${covers || '<span class="cover-chip cover-chip-empty">Нет связанных требований</span>'}</div>
+        </details>
         ${selected ? `<div class="cost-editor">
           <label>Внедрение, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.capex === null || costs.capex === undefined ? "" : escapeHtml(costs.capex)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="capex" aria-label="Стоимость внедрения: ${escapeHtml(item.name)}"><span>₽</span></span></label>
           <label>Эксплуатация в месяц, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.opex_month === null || costs.opex_month === undefined ? "" : escapeHtml(costs.opex_month)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="opex_month" aria-label="Стоимость эксплуатации в месяц: ${escapeHtml(item.name)}"><span>₽</span></span></label>
         </div>` : ""}
       </div>
-      <button type="button" class="catalog-item-select" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? '<svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'}</button>
+      <button type="button" class="catalog-item-select" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? "Убрать" : "Добавить"}</button>
     </article>`;
-  }).join("") || `<div class="empty-state"><div class="empty-illustration">⌕</div><strong>${state.items.length ? "Ничего не найдено" : "Каталог пока пуст"}</strong><p>${state.items.length ? "Измените запрос или выберите другую категорию." : "Импортируйте стартовый набор и выгрузку реестра через административный раздел."}</p></div>`;
+  }).join("") || `<div class="empty-state"><strong>${state.items.length ? "Ничего не найдено" : "Каталог пока пуст"}</strong><p>${state.items.length ? "Измените запрос или выберите другую категорию." : "Импортируйте стартовый набор и выгрузку реестра через административный раздел."}</p></div>`;
   $("#catalog-show-more").hidden = visible.length >= filtered.length;
   $("#catalog-total").textContent = `${state.items.length} позиций`;
   const toolCount = state.items.filter((item) => item.kind === "tool").length;
   const orgCount = state.items.filter((item) => item.kind === "org").length;
-  const unmappedCount = state.items.filter((item) => !(item.covers ?? []).length).length;
   const allTab = $('[data-kind="all"]');
   const toolTab = $('[data-kind="tool"]');
   const orgTab = $('[data-kind="org"]');
   if (allTab) allTab.textContent = `Все (${state.items.length})`;
   if (toolTab) toolTab.textContent = `Средства (${toolCount})`;
   if (orgTab) orgTab.textContent = `Оргмеры (${orgCount})`;
-  const sourceSummary = $("#catalog-source-summary");
-  if (sourceSummary) {
-    const parts = [`${toolCount} средств защиты`, `${orgCount} организационных мер`];
-    if (toolCount === 0) parts.push("средства появятся после импорта выгрузки реестра в административном разделе");
-    if (unmappedCount > 0) parts.push(`${unmappedCount} позиций без связи с требованиями — их нужно сопоставить в разделе администратора «Средства»`);
-    sourceSummary.textContent = parts.join(" · ");
-  }
   $("#catalog-visible-count").textContent = filtered.length > visible.length
-    ? `Показано ${visible.length} из ${filtered.length} найденных. Нажмите «Показать ещё», чтобы увидеть остальные`
+    ? `Показано ${visible.length} из ${filtered.length}`
     : `Показано ${filtered.length} из ${state.items.length}`;
 }
 
@@ -458,7 +440,7 @@ function renderOverview() {
     ? (evaluation.all_mandatory_covered ? "Текущий набор соответствует выбранному профилю по проверенным требованиям." : `Не закрыто обязательных требований: ${evaluation.uncovered_mandatory.length}.`)
     : "Результат проверки обязательных требований появится после расчёта.";
   $("#overview-selected-list").innerHTML = selected.length ? selected.slice(0, 5).map(({ item, total }) => (
-    `<div class="mini-item"><span class="mini-item-icon">${miniIcon(item.kind)}</span><span class="mini-item-copy"><strong>${escapeHtml(item.name)}</strong><small>${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</small></span><strong class="mini-item-cost">${money(total)}</strong></div>`
+    `<div class="mini-item"><span class="mini-item-copy"><strong>${escapeHtml(item.name)}</strong><small>${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</small></span><strong class="mini-item-cost">${money(total)}</strong></div>`
   )).join("") : '<div class="empty-state"><strong>Набор пока пуст</strong><p>Перейдите к подбору и добавьте средства или организационные меры.</p></div>';
   $("#overview-total-cost").textContent = money(totalSelectedCost());
 }
@@ -545,6 +527,13 @@ function updateModeVisibility() {
   $("#budget-field").hidden = mode !== "max_coverage";
 }
 
+function formatElapsed(elapsedMs) {
+  const value = Number(elapsedMs);
+  if (!Number.isFinite(value)) return "—";
+  if (value < 1000) return `${Math.max(1, Math.round(value))} мс`;
+  return `${(value / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} с`;
+}
+
 function renderSolution(solution, source = "example") {
   state.lastOptimization = solution;
   $("#solution-empty").hidden = true;
@@ -552,10 +541,12 @@ function renderSolution(solution, source = "example") {
   $("#solution-cost").textContent = money(solution.cost);
   $("#solution-covered").textContent = `${solution.covered_count} из ${state.selectedRequirements.size}`;
   $("#solution-items-count").textContent = String(solution.selected.length);
+  const elapsed = $("#solution-time");
+  if (elapsed) elapsed.textContent = formatElapsed(solution.elapsed_ms);
   const selectedSet = new Set(solution.selected);
   const selectedItemsForResult = selectedItems().filter(({ item }) => selectedSet.has(item.id));
   $("#solution-items").innerHTML = selectedItemsForResult.length ? selectedItemsForResult.map(({ item, total }) => (
-    `<div class="solution-item"><span class="mini-item-icon">${miniIcon(item.kind)}</span><span>${escapeHtml(item.name)}</span><strong>${money(total)}</strong></div>`
+    `<div class="solution-item"><span>${escapeHtml(item.name)}</span><strong>${money(total)}</strong></div>`
   )).join("") : '<div class="empty-inline">Алгоритм не выбрал позиции из текущего набора.</div>';
   const chip = $("#solution-chip");
   chip.classList.toggle("is-success", Boolean(solution.feasible));
@@ -575,7 +566,7 @@ function renderSolution(solution, source = "example") {
 function renderPareto(solutions, selectedSolution = state.lastOptimization) {
   const container = $("#pareto-chart");
   if (!solutions?.length) {
-    container.innerHTML = '<div class="chart-placeholder"><span class="chart-placeholder-icon">↗</span><strong>Недостаточно данных для графика</strong><span>Добавьте позиции и запустите оптимизацию.</span></div>';
+    container.innerHTML = '<div class="chart-placeholder"><strong>Недостаточно данных для графика</strong><span>Добавьте позиции и запустите оптимизацию.</span></div>';
     return;
   }
   const width = 650;
@@ -624,6 +615,7 @@ function renderAll() {
 }
 
 function invalidateResults() {
+  queueDraftSave();
   state.lastEvaluation = null;
   state.resultSource = "none";
   state.lastOptimization = null;
@@ -722,26 +714,40 @@ async function runOptimization() {
   };
   state.isCalculating = true;
   const button = $("#run-optimization");
+  const stopButton = $("#stop-optimization");
+  const controller = new AbortController();
+  state.optimizationAbort = controller;
+  if (stopButton) stopButton.hidden = false;
   setLoading(button, true, "Подбираем…");
   let solution;
   let solutionSource = "server";
   let paretoSource = "server";
+  let stopped = false;
   try {
     if (state.usingExamples) throw new Error("Примерные справочники");
-    solution = await workspaceService.optimize(payload);
-  } catch {
-    solution = localOptimize(payload);
-    solutionSource = "example";
-    paretoSource = "example";
-    if (!state.problems.includes("Оптимизация: серверный метод недоступен, выполнен локальный расчёт")) state.problems.push("Оптимизация: серверный метод недоступен, выполнен локальный расчёт");
-    renderApiState();
+    solution = await workspaceService.optimize(payload, controller.signal);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      stopped = true;
+    } else {
+      solution = localOptimize(payload);
+      solutionSource = "example";
+      paretoSource = "example";
+      if (!state.problems.includes("Оптимизация: серверный метод недоступен, выполнен локальный расчёт")) state.problems.push("Оптимизация: серверный метод недоступен, выполнен локальный расчёт");
+      renderApiState();
+    }
   }
   try {
+    if (stopped) return;
     let pareto;
     if (paretoSource === "server") {
       try {
-        pareto = await workspaceService.pareto(payload);
-      } catch {
+        pareto = await workspaceService.pareto(payload, controller.signal);
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          stopped = true;
+          return;
+        }
         pareto = localPareto(payload.scenario);
         paretoSource = "example";
         if (!state.problems.includes("Фронт Парето: серверный метод недоступен, построен локальный график")) state.problems.push("Фронт Парето: серверный метод недоступен, построен локальный график");
@@ -752,17 +758,78 @@ async function runOptimization() {
     }
     state.lastPareto = Array.isArray(pareto) ? pareto : [];
   } finally {
+    if (stopButton) stopButton.hidden = true;
+    state.optimizationAbort = null;
+    state.isCalculating = false;
+    setLoading(button, false);
+    if (stopped) {
+      showToast("Расчёт остановлен.", "info");
+      return;
+    }
     state.lastOptimization = solution;
     renderSolution(solution, solutionSource);
     renderPareto(state.lastPareto, solution);
-    state.isCalculating = false;
-    setLoading(button, false);
     showToast(solutionSource === "server"
       ? "Подбор завершён на сервере."
       : state.usingExamples
         ? "Показан локальный подбор на демонстрационных данных."
         : "API оптимизации пока недоступен: вариант подобран локально по данным сервера.", solutionSource === "server" ? "success" : "info");
   }
+}
+
+async function stopOptimization() {
+  const controller = state.optimizationAbort;
+  try {
+    await workspaceService.cancelOptimization();
+  } catch {
+    /* сервер уже завершил расчёт */
+  }
+  controller?.abort();
+}
+
+let draftPath;
+let draftSave = Promise.resolve();
+let draftDirty = false;
+let draftSaveFailed = false;
+
+function queueDraftSave() {
+  if (!draftPath || !state.initializedOnce || state.usingExamples) return;
+  draftDirty = true;
+  draftSave = draftSave.then(async () => {
+    if (!draftDirty) return;
+    draftDirty = false;
+    await apiRequest(draftPath, {
+      method: "PUT",
+      body: {
+        profile_id: state.profileId,
+        period_months: state.periodMonths,
+        requirements: [...state.selectedRequirements],
+        candidates: [...state.candidates.keys()],
+        prices: Object.fromEntries(state.prices),
+        algorithm: $("#algorithm-select").value,
+        mode: $("input[name='opt-mode']:checked").value,
+        budget: $("#budget-input").value,
+      },
+    });
+    draftSaveFailed = false;
+  }).catch(() => {
+    draftSaveFailed = true;
+    showToast("Не удалось сохранить черновик. Повторите изменение или попробуйте выйти ещё раз.", "error");
+  });
+}
+
+function restoreDraft(draft) {
+  state.profileId = draft.profile_id;
+  state.periodMonths = draft.period_months;
+  $("#period-input").value = draft.period_months;
+  state.selectedRequirements = new Set(draft.requirements);
+  state.prices = new Map(Object.entries(draft.prices));
+  state.candidates = new Map(draft.candidates.map((id) => [
+    id, { ...(state.prices.get(id) ?? { capex: "", opex_month: "" }) },
+  ]));
+  $("input[name='opt-mode'][value='" + draft.mode + "']").checked = true;
+  $("#budget-input").value = draft.budget;
+  updateModeVisibility();
 }
 
 function selectItem(itemId) {
@@ -797,8 +864,9 @@ function onCostChange(event) {
   if (!input) return;
   const itemId = input.dataset.costItem;
   const field = input.dataset.costField;
+  if (input.validity.badInput) return;
   const parsed = input.value.trim() === "" ? "" : Math.max(0, Number(input.value) || 0);
-  input.value = String(parsed);
+  if (event.type === "change") input.value = String(parsed);
   const current = { ...(state.candidates.get(itemId) ?? priceFor(state.items.find((item) => item.id === itemId) ?? {})) };
   current[field] = parsed;
   state.candidates.set(itemId, current);
@@ -821,13 +889,21 @@ function bindEvents() {
     invalidateResults();
     renderAll();
   });
+  $("#period-input").addEventListener("input", (event) => {
+    const input = event.target;
+    if (!input.validity.valid || input.value === "") return;
+    state.periodMonths = Number(input.value);
+    invalidateResults();
+    updateBuilderSummary();
+  });
   $("#period-input").addEventListener("change", (event) => {
     const raw = Number(event.target.value);
     const value = Math.min(120, Math.max(0.1, Math.round((Number.isFinite(raw) && event.target.value !== "" ? raw : 12) * 10) / 10));
     state.periodMonths = value;
     event.target.value = String(value);
     invalidateResults();
-    renderAll();
+    renderOverview();
+    updateBuilderSummary();
   });
   $("#requirements-list").addEventListener("change", onRequirementChange);
   let requirementSearchTimer;
@@ -856,21 +932,27 @@ function bindEvents() {
     const button = event.target.closest("[data-toggle-item]");
     if (button) selectItem(button.dataset.toggleItem);
   });
+  $("#catalog-list").addEventListener("input", onCostChange);
   $("#catalog-list").addEventListener("change", onCostChange);
   $("#catalog-show-more").addEventListener("click", () => {
-    state.catalogLimit += CATALOG_PAGE_SIZE;
+    const pageSize = catalogPageSize();
+    if (Number.isFinite(pageSize)) state.catalogLimit += pageSize;
+    renderCatalog();
+  });
+  $("#catalog-page-size").addEventListener("change", () => {
+    state.catalogLimit = catalogPageSize();
     renderCatalog();
   });
   let searchTimer;
   $("#catalog-search").addEventListener("input", (event) => {
     state.search = event.target.value;
-    state.catalogLimit = CATALOG_PAGE_SIZE;
+    state.catalogLimit = catalogPageSize();
     clearTimeout(searchTimer);
     searchTimer = setTimeout(renderCatalog, 250);
   });
   $$(".catalog-tab").forEach((tab) => tab.addEventListener("click", () => {
     state.activeKind = tab.dataset.kind;
-    state.catalogLimit = CATALOG_PAGE_SIZE;
+    state.catalogLimit = catalogPageSize();
     $$(".catalog-tab").forEach((other) => other.classList.toggle("is-active", other === tab));
     renderCatalog();
   }));
@@ -882,8 +964,16 @@ function bindEvents() {
   });
   $("#run-evaluation").addEventListener("click", runEvaluation);
   $("#run-optimization").addEventListener("click", runOptimization);
-  $("#algorithm-select").addEventListener("change", updateAlgorithmDescription);
-  $$('input[name="opt-mode"]').forEach((input) => input.addEventListener("change", updateModeVisibility));
+  $("#algorithm-select").addEventListener("change", () => {
+    updateAlgorithmDescription();
+    queueDraftSave();
+  });
+  $("#budget-input").addEventListener("input", queueDraftSave);
+  $$('input[name="opt-mode"]').forEach((input) => input.addEventListener("change", () => {
+    updateModeVisibility();
+    queueDraftSave();
+  }));
+  $("#stop-optimization")?.addEventListener("click", stopOptimization);
   $("#refresh-data").addEventListener("click", async () => {
     showToast("Обновляем справочники…");
     await loadPageData();
@@ -891,10 +981,21 @@ function bindEvents() {
   });
   $("#notice-close").addEventListener("click", () => { $("#data-notice").hidden = true; });
   $("#mobile-menu").addEventListener("click", () => $(".sidebar").classList.toggle("is-open"));
-  $("#logout-button").addEventListener("click", () => { window.location.assign("/"); });
+  $("#logout-button").addEventListener("click", async () => {
+    try {
+      if (draftSaveFailed) queueDraftSave();
+      await draftSave;
+      if (draftSaveFailed) return;
+      await apiRequest("/auth/logout", { method: "POST" });
+      window.location.assign("/");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
 }
 
-async function loadPageData() {
+async function loadPageData(draft = null) {
+  const previousAlgorithm = draft?.algorithm ?? $("#algorithm-select").value;
   const result = await workspaceService.loadCatalogs();
   state.requirements = result.requirements;
   state.items = result.items;
@@ -906,12 +1007,13 @@ async function loadPageData() {
   state.serverOnline = result.serverOnline;
   state.problems = result.problems;
 
+  if (draft) restoreDraft(draft);
   state.profileId = state.profiles.some((entry) => entry.id === state.profileId)
     ? state.profileId
     : (state.profiles[0]?.id ?? "");
   const validRequirementIds = new Set(state.requirements.map((entry) => entry.id));
   state.selectedRequirements = new Set([...state.selectedRequirements].filter((id) => validRequirementIds.has(id)));
-  if (!state.initializedOnce) {
+  if (!state.initializedOnce && !draft) {
     state.selectedRequirements = new Set(mandatoryIds());
   }
   mandatoryRequirementsAreIncluded();
@@ -920,18 +1022,36 @@ async function loadPageData() {
     if (!validItemIds.has(itemId)) state.candidates.delete(itemId);
   }
   state.initializedOnce = true;
-  for (const item of state.items) {
-    if (!state.prices.has(item.id)) state.prices.set(item.id, { capex: "", opex_month: "" });
-  }
   renderOptimizerOptions();
+  if (state.optimizers.some((optimizer) => optimizer.name === previousAlgorithm)) {
+    $("#algorithm-select").value = previousAlgorithm;
+    updateAlgorithmDescription();
+  }
   renderAll();
 }
 
-bindEvents();
-updateModeVisibility();
-loadPageData().catch((error) => {
-  state.usingExamples = true;
-  state.problems = [error?.message || "Не удалось загрузить справочники"];
-  renderApiState();
-  showToast("Не удалось загрузить данные. Проверьте соединение с приложением.", "error");
+async function initialize() {
+  const account = await apiRequest("/auth/me");
+  const path = "/users/" + account.id + "/draft";
+  let draft = null;
+  try {
+    draft = await apiRequest(path);
+    draftPath = path;
+  } catch (error) {
+    if (error.status === 401) throw error;
+    showToast("Не удалось загрузить черновик. Сохранение временно недоступно.", "error");
+  }
+  await loadPageData(draft);
+  $("#logout-button .profile-copy strong").textContent = account.login;
+  bindEvents();
+  updateModeVisibility();
+}
+
+initialize().catch((error) => {
+  if (error?.status === 401) {
+    window.location.replace("/");
+    return;
+  }
+  $("#data-notice-text").textContent = error?.message || "Не удалось загрузить справочники.";
+  $("#data-notice").hidden = false;
 });

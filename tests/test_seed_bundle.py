@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-# файл может лежать в seed/ или в data/ (data/ в .gitignore, там он добавлен через git add -f)
+# Ищем начальные справочники в seed/, затем в data/.
 SEED = next(
     (
         p
@@ -70,7 +70,7 @@ def test_org_items_are_org_and_cover_existing_requirements(bundle):
 
 
 def test_import_and_read_back(client):
-    """Импорт бандла через API и чтение обратно (нужна фикстура client)."""
+    """Проверяет импорт справочников через API и чтение сохранённых данных."""
     assert (
         client.post(
             "/api/auth/login", json={"login": "admin", "password": "admin"}
