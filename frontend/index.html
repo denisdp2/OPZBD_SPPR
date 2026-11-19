@@ -3,82 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101f3e">
+  <meta name="theme-color" content="#0f2438">
   <meta name="description" content="Вход в учётную запись">
-  <title>Вход</title>
-  <link rel="stylesheet" href="/static/assets/css/auth.css?v=simple-1">
-  <link rel="stylesheet" href="/static/assets/css/auth-admin-theme.css?v=5" data-admin-theme="auth-v5">
-  <script type="module" src="/static/assets/js/pages/auth-page.js?v=qa-1"></script>
+  <title>Вход — СППР</title>
+  <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-6">
+  <link rel="stylesheet" href="/static/assets/css/auth.css?v=admin-layout-1">
+  <script type="module" src="/static/assets/js/pages/auth-page.js?v=admin-layout-1"></script>
 </head>
 <body>
-  <main class="page-shell">
-    <section class="auth-panel" aria-label="Формы учётной записи">
-      <div class="auth-content">
-        <div class="auth-brand">СППР</div>
+  <div class="layout auth-layout">
+    <aside class="side">
+      <div class="brand-name">СППР</div>
+      <nav aria-label="Учётная запись">
+        <button class="auth-tab active" type="button" aria-current="page" data-view="login">Вход</button>
+        <button class="auth-tab" type="button" data-view="register">Регистрация</button>
+      </nav>
+    </aside>
 
-        <div class="auth-tabs" role="tablist" aria-label="Действия с учётной записью">
-          <button class="auth-tab is-active" type="button" role="tab" aria-selected="true" data-view="login">Войти</button>
-          <button class="auth-tab" type="button" role="tab" aria-selected="false" data-view="register">Регистрация</button>
+    <main class="main auth-main">
+      <section id="login-view" aria-labelledby="login-title">
+        <div class="top"><h1 id="login-title">Вход</h1></div>
+        <form class="card auth-form" id="login-form" novalidate>
+          <label for="login-name">Логин</label>
+          <input id="login-name" name="login" type="text" autocomplete="username" required maxlength="64">
+          <label for="login-password">Пароль</label>
+          <div class="auth-password">
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+            <button class="btn secondary" type="button" data-password-toggle="login-password" aria-label="Показать пароль">Показать</button>
+          </div>
+          <div class="toolbar auth-actions">
+            <button class="btn" type="submit">Войти</button>
+            <button class="btn secondary" type="button" data-view="forgot">Забыли пароль?</button>
+          </div>
+          <div class="form-message" id="login-message" role="status" hidden></div>
+        </form>
+      </section>
+
+      <section id="register-view" aria-labelledby="register-title" hidden>
+        <div class="top"><h1 id="register-title">Регистрация</h1></div>
+        <form class="card auth-form" id="register-form" novalidate>
+          <label for="register-name">Логин</label>
+          <input id="register-name" name="login" type="text" autocomplete="username" required minlength="3" maxlength="64" aria-describedby="register-login-hint">
+          <p class="auth-hint" id="register-login-hint">Не менее 3 символов.</p>
+          <label for="register-password">Пароль</label>
+          <div class="auth-password">
+            <input id="register-password" name="password" type="password" autocomplete="new-password" required minlength="8" aria-describedby="register-password-hint">
+            <button class="btn secondary" type="button" data-password-toggle="register-password" aria-label="Показать пароль">Показать</button>
+          </div>
+          <p class="auth-hint" id="register-password-hint">Не менее 8 символов.</p>
+          <div class="toolbar auth-actions"><button class="btn" type="submit">Создать аккаунт</button></div>
+          <div class="form-message" id="register-message" role="status" hidden></div>
+        </form>
+      </section>
+
+      <section id="forgot-view" aria-labelledby="forgot-title" hidden>
+        <div class="top"><h1 id="forgot-title">Восстановление доступа</h1></div>
+        <div class="card auth-form">
+          <p>Сообщите администратору свой логин, чтобы он мог задать новый пароль.</p>
+          <button class="btn secondary" type="button" data-view="login">Назад ко входу</button>
         </div>
-
-        <section class="form-view is-visible" id="login-view" aria-labelledby="login-title">
-          <div class="form-intro">
-            <h2 id="login-title">Войти в аккаунт</h2>
-
-          </div>
-          <form id="login-form" novalidate>
-            <label class="field-label" for="login-name">Логин</label>
-            <div class="input-wrap">
-              <input id="login-name" name="login" type="text" placeholder="Введите логин" autocomplete="username" required maxlength="64">
-            </div>
-
-            <div class="label-row"><label class="field-label" for="login-password">Пароль</label><button class="text-link small-link" type="button" data-view="forgot">Забыли пароль?</button></div>
-            <div class="input-wrap">
-              <input id="login-password" name="password" type="password" placeholder="Введите пароль" autocomplete="current-password" required>
-              <button class="password-toggle" type="button" data-password-toggle="login-password" aria-label="Показать пароль">Показать</button>
-            </div>
-
-            <button class="submit-button" type="submit"><span>Войти в систему</span></button>
-            <div class="form-message" id="login-message" role="status" aria-live="polite" hidden></div>
-          </form>
-          <p class="form-switch">Впервые здесь? <button type="button" class="text-link" data-view="register">Создать аккаунт</button></p>
-        </section>
-
-        <section class="form-view" id="register-view" aria-labelledby="register-title" hidden>
-          <div class="form-intro">
-            <h2 id="register-title">Создать аккаунт</h2>
-
-          </div>
-          <form id="register-form" novalidate>
-            <label class="field-label" for="register-name">Логин</label>
-            <div class="input-wrap">
-              <input id="register-name" name="login" type="text" placeholder="Придумайте логин" autocomplete="username" required minlength="3" maxlength="64">
-            </div>
-            <p class="field-hint">Не менее 3 символов.</p>
-
-            <label class="field-label" for="register-password">Пароль</label>
-            <div class="input-wrap">
-              <input id="register-password" name="password" type="password" placeholder="Придумайте пароль" autocomplete="new-password" required minlength="8">
-              <button class="password-toggle" type="button" data-password-toggle="register-password" aria-label="Показать пароль">Показать</button>
-            </div>
-            <p class="field-hint">Не менее 8 символов.</p>
-
-            <button class="submit-button" type="submit"><span>Создать аккаунт</span></button>
-            <div class="form-message" id="register-message" role="status" aria-live="polite" hidden></div>
-          </form>
-          <p class="form-switch">Уже зарегистрированы? <button type="button" class="text-link" data-view="login">Войти</button></p>
-        </section>
-
-        <section class="form-view" id="forgot-view" aria-labelledby="forgot-title" hidden>
-          <button class="back-link" type="button" data-view="login"> Назад ко входу</button>
-          <div class="form-intro">
-            <h2 id="forgot-title">Забыли пароль?</h2>
-            <p>Обратитесь к администратору и сообщите свой логин. Администратор сможет задать новый пароль.</p>
-          </div>
-
-        </section>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
+  </div>
 </body>
 </html>

@@ -246,22 +246,14 @@ function setLoading(button, loading, idleText) {
 function renderApiState() {
   const notice = $("#data-notice");
   const noticeText = $("#data-notice-text");
-  const footerState = $("#footer-data-state");
   const hasCatalogGap = state.catalogsEmpty;
   if (notice) {
     notice.hidden = !state.usingExamples && !hasCatalogGap;
     if (noticeText) {
       noticeText.textContent = state.usingExamples
-        ? "Сервер недоступен. Для просмотра показан демонстрационный набор; результаты не являются расчётом по рабочей базе."
-        : "Часть справочников не получена или пока пуста. Проверьте импорт data/seed_bundle.json через административный раздел (/admin → Импорт) и доступность API. После изменений обновите данные кнопкой вверху.";
+        ? "Сервер недоступен. Показаны демонстрационные справочники."
+        : "Часть справочников недоступна. Обновите их или обратитесь к администратору.";
     }
-  }
-  if (footerState) {
-    footerState.textContent = state.usingExamples
-      ? "Отображаются демонстрационные данные"
-      : hasCatalogGap
-        ? "Ожидается импорт справочников"
-        : `${state.requirements.length} требований · ${state.items.length} позиций · ${state.profiles.length} профиля · данные с сервера`;
   }
 }
 
@@ -270,7 +262,7 @@ function renderProfileOptions() {
   if (!select) return;
   const profiles = [...state.profiles].sort((a, b) => String(a.id).localeCompare(String(b.id), "ru", { numeric: true }));
   select.innerHTML = profiles.map((entry) => (
-    `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)} · ${(entry.mandatory ?? []).length} обязательных</option>`
+    `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`
   )).join("");
   select.value = state.profileId;
   const description = $("#profile-description");
@@ -396,11 +388,10 @@ function renderCatalog() {
           <label>Эксплуатация в месяц, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.opex_month === null || costs.opex_month === undefined ? "" : escapeHtml(costs.opex_month)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="opex_month" aria-label="Стоимость эксплуатации в месяц: ${escapeHtml(item.name)}"><span>₽</span></span></label>
         </div>` : ""}
       </div>
-      <button type="button" class="catalog-item-select" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? "Убрать" : "Добавить"}</button>
+      <button type="button" class="btn ${selected ? "secondary " : ""}compact-button" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? "Убрать" : "Добавить"}</button>
     </article>`;
   }).join("") || `<div class="empty-state"><strong>${state.items.length ? "Ничего не найдено" : "Каталог пока пуст"}</strong><p>${state.items.length ? "Измените запрос или выберите другую категорию." : "Импортируйте стартовый набор и выгрузку реестра через административный раздел."}</p></div>`;
   $("#catalog-show-more").hidden = visible.length >= filtered.length;
-  $("#catalog-total").textContent = `${state.items.length} позиций`;
   const toolCount = state.items.filter((item) => item.kind === "tool").length;
   const orgCount = state.items.filter((item) => item.kind === "org").length;
   const allTab = $('[data-kind="all"]');
@@ -481,15 +472,15 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
     ? `Покрыто ${covered.size} из ${requiredSet.size} требований. Общая стоимость рассчитана на выбранный период.`
     : `Не закрыто обязательных требований: ${(result.uncovered_mandatory ?? []).map((id) => id).join(", ") || "не определено"}.`;
   $("#evaluation-banner-status").textContent = source === "server" ? "Расчёт API" : "Примерный расчёт";
-  list.innerHTML = state.requirements.filter((req) => requiredSet.has(req.id)).map((req) => {
+  const rows = state.requirements.filter((req) => requiredSet.has(req.id)).map((req) => {
     const isCovered = covered.has(req.id);
     const itemNames = (coveredBy[req.id] ?? []).map((itemId) => state.items.find((item) => item.id === itemId)?.name ?? itemId);
-    return `<div class="result-requirement">
-      <div class="result-req-main"><div class="result-req-title"><span class="result-req-code">${escapeHtml(req.id)}</span>${escapeHtml(req.title)}${mandatory.has(req.id) ? ' <span class="mandatory-pill">Обязательное</span>' : ""}</div><div class="result-req-meta">${escapeHtml(req.group || req.source || "Требование")}</div></div>
-      <div class="coverage-bar-wrap"><div class="coverage-bar"><span class="${isCovered ? "" : "is-uncovered"}" style="width:${isCovered ? 100 : 0}%"></span></div><span class="coverage-bar-label">${isCovered ? "100%" : "0%"}</span></div>
-      <span class="coverage-state ${isCovered ? "is-covered" : "is-uncovered"}"><i class="legend-dot ${isCovered ? "dot-green" : "dot-amber"}"></i>${isCovered ? escapeHtml(itemNames.join(", ") || "Закрыто") : "Не закрыто"}</span>
-    </div>`;
+    return `<tr>
+      <td><strong>${escapeHtml(req.id)}</strong> ${escapeHtml(req.title)}${mandatory.has(req.id) ? ' <span class="mandatory-pill">Обязательное</span>' : ""}<div class="result-req-meta">${escapeHtml(req.group || req.source || "")}</div></td>
+      <td class="${isCovered ? "is-covered" : "is-uncovered"}">${isCovered ? escapeHtml(itemNames.join(", ") || "Закрыто") : "Не закрыто"}</td>
+    </tr>`;
   }).join("");
+  list.innerHTML = `<table><thead><tr><th scope="col">Требование</th><th scope="col">Чем закрыто</th></tr></thead><tbody>${rows}</tbody></table>`;
   if (source !== "server") {
     const explanation = state.usingExamples
       ? " Показатели рассчитаны локально на демонстрационных данных."
@@ -499,12 +490,9 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
 }
 
 function updateBuilderSummary() {
-  const chosen = selectedItems();
   const total = totalSelectedCost();
-  $("#builder-item-count").textContent = `${chosen.length} позиций выбрано`;
   $("#builder-total-cost").textContent = money(total);
   $("#builder-period-label").textContent = `${number.format(state.periodMonths)} ${state.periodMonths === 1 ? "месяц" : state.periodMonths < 5 ? "месяца" : "месяцев"}`;
-  $("#nav-selected-count").textContent = String(chosen.length);
 }
 
 function renderOptimizerOptions() {
@@ -631,15 +619,16 @@ function navigateTo(name) {
   const section = $(`[data-page-section="${name}"]`);
   if (!section) return;
   $$('[data-page-section]').forEach((entry) => {
-    const active = entry.dataset.pageSection === name;
-    entry.hidden = !active;
-    entry.classList.toggle("is-visible", active);
+    entry.hidden = entry.dataset.pageSection !== name;
   });
-  $$(".nav-link[data-page]").forEach((link) => link.classList.toggle("is-active", link.dataset.page === name));
-  const captions = { overview: "Рабочий стол", builder: "Состав набора", evaluation: "Оценка набора", optimization: "Оптимизация" };
-  $("#breadcrumb-current").textContent = captions[name] ?? "Рабочая область";
-  $(".sidebar").classList.remove("is-open");
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  $$(".workspace-nav [data-page]").forEach((button) => {
+    const active = button.dataset.page === name;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+  document.title = `${$("h1", section).textContent} — СППР`;
+  window.scrollTo({ top: 0 });
   if (name === "evaluation" && !state.lastEvaluation) runEvaluation();
 }
 
@@ -980,7 +969,6 @@ function bindEvents() {
     showToast("Справочники обновлены.", "success");
   });
   $("#notice-close").addEventListener("click", () => { $("#data-notice").hidden = true; });
-  $("#mobile-menu").addEventListener("click", () => $(".sidebar").classList.toggle("is-open"));
   $("#logout-button").addEventListener("click", async () => {
     try {
       if (draftSaveFailed) queueDraftSave();
@@ -1042,7 +1030,7 @@ async function initialize() {
     showToast("Не удалось загрузить черновик. Сохранение временно недоступно.", "error");
   }
   await loadPageData(draft);
-  $("#logout-button .profile-copy strong").textContent = account.login;
+  $("#workspace-account").textContent = account.login;
   bindEvents();
   updateModeVisibility();
 }

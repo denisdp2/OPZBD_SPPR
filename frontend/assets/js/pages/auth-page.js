@@ -13,21 +13,19 @@ function showView(name) {
   if (!Object.hasOwn(views, name)) return;
 
   Object.entries(views).forEach(([key, section]) => {
-    const active = key === name;
-    section.hidden = !active;
-    section.classList.toggle("is-visible", active);
+    section.hidden = key !== name;
   });
 
   tabs.forEach((tab) => {
     const active = tab.dataset.view === name;
-    tab.classList.toggle("is-active", active);
-    tab.setAttribute("aria-selected", String(active));
+    tab.classList.toggle("active", active);
+    if (active) tab.setAttribute("aria-current", "page");
+    else tab.removeAttribute("aria-current");
   });
 
   const titles = { login: "Вход", register: "Регистрация", forgot: "Восстановление доступа" };
-  document.title = titles[name];
-  const focusTarget = views[name].querySelector("input");
-  if (focusTarget) window.setTimeout(() => focusTarget.focus(), 50);
+  document.title = `${titles[name]} — СППР`;
+  views[name].querySelector("input, button")?.focus();
 }
 
 function showMessage(formId, message, type = "info") {
