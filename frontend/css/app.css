@@ -351,7 +351,12 @@ button:disabled { cursor: wait; opacity: .55; }
 #coverage-errors { max-height: 160px; overflow-y: auto; }
 .upload-bar a.btn { text-decoration: none; }
 [data-view-panel][hidden] { display: none; }
-#item-coverage-dialog { width: min(620px, calc(100% - 32px)); }
+html:has(#item-coverage-dialog) { scrollbar-gutter: stable; }
+html:has(#item-coverage-dialog:modal) { overflow: hidden; }
+#item-coverage-dialog {
+  width: min(620px, calc(100% - 32px));
+  overscroll-behavior: contain;
+}
 #item-coverage-name { margin: 0 0 16px; overflow-wrap: anywhere; }
 #item-coverage-suggestions:not([hidden]) {
   background: var(--paper);

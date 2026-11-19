@@ -682,11 +682,9 @@ registryExportButtons.forEach(control => control.addEventListener("click", async
   const visit = registryVisit;
   registryExportButtons.forEach(button => button.disabled = true);
   downloadDialog.close();
-  const local = format === "local";
-  const path = local ? "/api/admin/registry/export.xlsx" : `/api/admin/registry/download/${format}`;
-  status.textContent = local ? "Формируем XLSX из локальной базы…" : `Скачивание ${format.toUpperCase()} с сайта реестра…`;
+  status.textContent = `Скачивание ${format.toUpperCase()} с сайта реестра…`;
   try {
-    const result = await SZI.request(path, {method: "POST"});
+    const result = await SZI.request(`/api/admin/registry/download/${format}`, {method: "POST"});
     if (visit !== registryVisit) return;
     status.textContent = result.cached
       ? `Свежая выгрузка недоступна. Последняя сохранённая копия: ${result.path}`

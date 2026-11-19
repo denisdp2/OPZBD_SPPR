@@ -585,22 +585,6 @@ def create_app(
     def registry_import_status() -> dict[str, str | None]:
         return registry.store.import_status()
 
-    @admin.post("/registry/export.xlsx")
-    def save_local_registry_excel() -> dict:
-        cache = paths.data_dir() / "registry-cache" / "registry-local.xlsx"
-        try:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            content = export_registry_xlsx(registry.store.query("", "all", "reg_number", False))
-            with TemporaryDirectory(dir=cache.parent) as directory:
-                target = Path(directory) / cache.name
-                target.write_bytes(content)
-                target.replace(cache)
-        except OSError as exc:
-            raise HTTPException(
-                status_code=500, detail="Не удалось записать XLSX на диск."
-            ) from exc
-        return {"path": str(cache.resolve()), "cached": False}
-
     def save_registry_export(format: str) -> tuple[Path, bool]:
         cache = paths.data_dir() / "registry-cache" / f"registry.{format}"
         try:
@@ -628,7 +612,6 @@ def create_app(
                 raise HTTPException(
                     status_code=500, detail="Не удалось записать официальную выгрузку на диск."
                 ) from exc
-            message += " Можно сохранить XLSX из локальной базы."
             raise HTTPException(status_code=502, detail=message) from exc
 
     @admin.post("/registry/download/{format}")
