@@ -131,6 +131,7 @@
 .pareto-panel { margin-top: 16px; }
 .pareto-chart svg { width: 100%; height: auto; max-height: 340px; }
 .chart-footer span .legend-dot { margin-right: 4px; }
+.chart-footer[hidden] { display: none; }
 .data-notice, .toast { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .data-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; margin-bottom: 16px; }
 .toast-region { position: fixed; z-index: 4; right: 16px; bottom: 16px; width: min(360px, calc(100% - 32px)); }

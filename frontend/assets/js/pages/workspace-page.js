@@ -607,6 +607,7 @@ function renderSolution(solution, source = "example") {
 
 function renderPareto(solutions, selectedSolution = state.lastOptimization) {
   const container = $("#pareto-chart");
+  $("#pareto-legend").hidden = !solutions?.length;
   if (!solutions?.length) {
     container.innerHTML = '<div class="chart-placeholder"><strong>Недостаточно данных для графика</strong><span>Добавьте позиции и запустите оптимизацию.</span></div>';
     return;
@@ -617,8 +618,9 @@ function renderPareto(solutions, selectedSolution = state.lastOptimization) {
   const top = 20;
   const plotWidth = 555;
   const plotHeight = 190;
-  const maxCost = Math.max(1, ...solutions.map((entry) => Number(entry.cost) || 0));
-  const maxCovered = Math.max(1, state.selectedRequirements.size, ...solutions.map((entry) => Number(entry.covered_count) || 0));
+  const maxCost = Math.max(1, selectedSolution?.cost ?? 0, ...solutions.map((entry) => entry.cost));
+  const maxCovered = Math.max(1, state.selectedRequirements.size, selectedSolution?.covered_count ?? 0,
+    ...solutions.map((entry) => entry.covered_count));
   const x = (cost) => left + (Math.max(0, Number(cost) || 0) / maxCost) * plotWidth;
   const y = (covered) => top + plotHeight - ((Number(covered) || 0) / maxCovered) * plotHeight;
   const grid = Array.from({ length: 5 }, (_, i) => {
@@ -629,20 +631,25 @@ function renderPareto(solutions, selectedSolution = state.lastOptimization) {
   const ordered = [...solutions].sort((a, b) => (Number(a.cost) || 0) - (Number(b.cost) || 0));
   const frontierPath = ordered.map((entry, index) => `${index ? "L" : "M"} ${x(entry.cost)} ${y(entry.covered_count)}`).join(" ");
   const frontier = ordered.length > 1
-    ? `<path d="${frontierPath}" fill="none" stroke="#5d82d6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"/>`
+    ? `<path d="${frontierPath}" fill="none" stroke="var(--navy)" stroke-opacity=".55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"/>`
     : "";
-  const points = ordered.map((entry) => {
-    const active = selectedSolution && Array.isArray(selectedSolution.selected) &&
-      entry.selected?.length === selectedSolution.selected.length &&
-      entry.selected.every((id) => selectedSolution.selected.includes(id)) &&
-      Math.round(entry.cost) === Math.round(selectedSolution.cost);
+  function marker(entry, selected = false) {
     const px = x(entry.cost);
     const py = y(entry.covered_count);
-    const color = active ? "#18825b" : entry.feasible ? "#3169e8" : "#d79a2b";
-    return `<g><title>Стоимость: ${escapeHtml(money(entry.cost))}; закрыто требований: ${entry.covered_count}; ${entry.feasible ? "допустимый вариант" : "не все обязательные требования закрыты"}</title><circle cx="${px}" cy="${py}" r="${active ? 6 : 4.5}" fill="${color}" fill-opacity="${active ? 1 : .82}" stroke="#fff" stroke-width="2"/></g>`;
-  }).join("");
+    const color = selected ? "var(--ok)" : entry.feasible ? "var(--navy)" : "var(--accent)";
+    return `<g${selected ? ' data-pareto-selected' : ""}><title>${selected ? "Найденное решение. " : ""}Стоимость: ${escapeHtml(money(entry.cost))}; закрыто требований: ${entry.covered_count}; ${entry.feasible ? "допустимый вариант" : "не все обязательные требования закрыты"}</title><circle cx="${px}" cy="${py}" r="${selected ? 7 : 5}" fill="${color}" stroke="#fff" stroke-width="2"/></g>`;
+  }
+  const selectedIds = new Set(selectedSolution?.selected);
+  const selectedIndex = selectedSolution ? ordered.findIndex((entry) =>
+    entry.selected.length === selectedIds.size && entry.selected.every((id) => selectedIds.has(id)) &&
+    Math.abs(entry.cost - selectedSolution.cost) < 1e-6 && entry.covered_count === selectedSolution.covered_count
+  ) : -1;
+  $("#pareto-selected-label").textContent = selectedIndex === -1
+    ? "Найденное решение (вне фронта)" : "Найденное решение";
+  const points = ordered.map((entry, index) => index === selectedIndex ? "" : marker(entry)).join("");
+  const selectedPoint = selectedSolution ? marker(selectedSolution, true) : "";
   const labels = `<text x="${left + plotWidth / 2}" y="258" text-anchor="middle" fill="#77849a" font-size="10">Стоимость за период, ₽</text><text transform="translate(15 ${top + plotHeight / 2}) rotate(-90)" text-anchor="middle" fill="#77849a" font-size="10">Закрыто требований</text><text x="${left}" y="229" text-anchor="start" fill="#8793a7" font-size="10">0</text><text x="${left + plotWidth}" y="229" text-anchor="end" fill="#8793a7" font-size="10">${escapeHtml(number.format(maxCost))}</text>`;
-  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="График стоимости и числа закрытых требований">${grid}<line x1="${left}" y1="${top}" x2="${left}" y2="${top + plotHeight}" stroke="#ccd4e1"/><line x1="${left}" y1="${top + plotHeight}" x2="${left + plotWidth}" y2="${top + plotHeight}" stroke="#ccd4e1"/>${frontier}${points}${labels}</svg>`;
+  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="График стоимости и числа закрытых требований">${grid}<line x1="${left}" y1="${top}" x2="${left}" y2="${top + plotHeight}" stroke="#ccd4e1"/><line x1="${left}" y1="${top + plotHeight}" x2="${left + plotWidth}" y2="${top + plotHeight}" stroke="#ccd4e1"/>${frontier}${points}${selectedPoint}${labels}</svg>`;
 }
 
 function renderAll() {
