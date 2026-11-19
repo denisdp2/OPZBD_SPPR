@@ -651,6 +651,75 @@ adminUserForm.addEventListener("submit", async event => {
   }
 });
 
+const coverageDialog = document.getElementById("coverage-dialog");
+const coverageForm = document.getElementById("coverage-form");
+const coverageFile = document.getElementById("coverage-file");
+const coverageReport = document.getElementById("coverage-report");
+const coverageErrors = document.getElementById("coverage-errors");
+const coveragePreview = coverageForm.querySelector('[value="preview"]');
+const coverageApply = coverageForm.querySelector('[value="apply"]');
+let coverageBusy = false;
+
+function clearCoverageReport() {
+  coverageReport.textContent = "";
+  coverageErrors.replaceChildren();
+  coverageErrors.hidden = true;
+  coverageApply.disabled = true;
+}
+
+document.querySelectorAll("[data-coverage-kind]").forEach(button => {
+  button.addEventListener("click", () => {
+    if (coverageBusy) return;
+    coverageForm.reset();
+    clearCoverageReport();
+    coverageForm.dataset.kind = button.dataset.coverageKind;
+    coverageDialog.showModal();
+  });
+});
+coverageFile.addEventListener("change", clearCoverageReport);
+coverageForm.addEventListener("submit", async event => {
+  if (event.submitter?.formMethod === "dialog") return;
+  event.preventDefault();
+  if (coverageBusy) return;
+  const apply = event.submitter?.value === "apply";
+  if (apply && coverageApply.disabled) return;
+  const kind = coverageForm.dataset.kind;
+  const body = new FormData(coverageForm);
+  clearCoverageReport();
+  coverageBusy = true;
+  coveragePreview.disabled = true;
+  coverageFile.disabled = true;
+  coverageReport.textContent = apply ? "Сохраняем связи…" : "Проверяем файл…";
+  try {
+    const report = await SZI.request(`/api/admin/coverage/import?kind=${kind}&apply=${apply}`, {
+      method: "POST", body,
+    });
+    const label = report.applied ? "Добавлено" : "К добавлению";
+    coverageReport.textContent = `${label}: ${report.added}. Повторы: ${report.existing}. ` +
+      `Пропущено: ${report.skipped}. Ошибок: ${report.error_count}.`;
+    if (report.error_count) {
+      coverageReport.append(" Исправьте ошибки в файле и загрузите его заново.");
+      coverageErrors.hidden = false;
+      for (const error of report.errors) {
+        const li = document.createElement("li");
+        li.textContent = error;
+        coverageErrors.append(li);
+      }
+    }
+    coverageApply.disabled = apply || report.error_count > 0 || report.added === 0;
+    if (report.applied) {
+      if (kind === "tool") await loadRegistry();
+      else await loadOrg();
+    }
+  } catch (error) {
+    coverageReport.textContent = error.message;
+  } finally {
+    coverageBusy = false;
+    coveragePreview.disabled = false;
+    coverageFile.disabled = false;
+  }
+});
+
 (async () => {
   const user = await SZI.requireAdmin();
   if (!user) return;

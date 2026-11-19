@@ -342,3 +342,6 @@ button:disabled { cursor: wait; opacity: .55; }
 #req-table > form, #org-table > form { margin-bottom: 16px; }
 
 .catalog-add, #req-form, #tool-form, #org-form { margin-bottom: 16px; }
+#coverage-dialog { width: min(560px, calc(100% - 32px)); }
+#coverage-errors { max-height: 160px; overflow-y: auto; }
+.upload-bar a.btn { text-decoration: none; }

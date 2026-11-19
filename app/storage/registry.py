@@ -54,6 +54,13 @@ class RegistryStore:
                         "UPDATE registry SET price=NULL WHERE reg_number=?", (record.reg_number,)
                     )
 
+    def coverage_records(self) -> list[RegistryRecord]:
+        with closing(sqlite3.connect(self.path)) as con:
+            return [
+                RegistryRecord.model_validate_json(data)
+                for (data,) in con.execute("SELECT data FROM registry")
+            ]
+
     def list_records(self) -> list[dict]:
         with closing(sqlite3.connect(self.path)) as con:
             return [

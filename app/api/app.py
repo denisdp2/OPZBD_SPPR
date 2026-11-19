@@ -28,6 +28,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import BaseModel, Field, ValidationError
 
 from app import __version__, paths
@@ -57,6 +58,12 @@ from app.core.models import (
 )
 from app.core.problem import ScenarioError, build_problem
 from app.evaluation import evaluate as evaluate_problem
+from app.importers.coverage_review import (
+    MAX_FILE_SIZE,
+    read_review,
+    review_workbook,
+    suggest_coverage,
+)
 from app.importers.registry_download import download_registry_export, download_registry_xml
 from app.importers.service import RegistryService
 from app.optimization import UnknownOptimizer, get_optimizer
@@ -315,6 +322,53 @@ def create_app(
     def gaps() -> list[Requirement]:
         """Требования, которые не закрывает ни одно средство или мера."""
         return repo.uncovered_requirements()
+
+    @admin.get("/coverage/review.xlsx")
+    def export_coverage_review(kind: ItemKind = "tool") -> Response:
+        records = {}
+        if kind == "tool":
+            records = {
+                f"ru-software-{record.reg_number}": record.model_dump()
+                for record in registry.store.coverage_records()
+            }
+        requirements = {req.id: req for req in repo.list_requirements()}
+        rows = suggest_coverage(repo.list_items(kind=kind), requirements, records)
+        return Response(
+            review_workbook(rows),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="coverage-{kind}.xlsx"'},
+        )
+
+    @admin.post("/coverage/import")
+    def import_coverage(file: UploadFile, kind: ItemKind = "tool", apply: bool = False) -> dict:
+        if not isinstance(repo, SQLiteRepository):
+            raise HTTPException(status_code=501, detail="Импорт связей доступен для SQLite")
+        try:
+            if Path(file.filename or "").suffix.lower() != ".xlsx":
+                raise HTTPException(status_code=422, detail="Выберите файл XLSX")
+            content = file.file.read(MAX_FILE_SIZE + 1)
+            if len(content) > MAX_FILE_SIZE:
+                raise HTTPException(status_code=413, detail="Размер файла превышает 12 МБ")
+            links, skipped, errors = read_review(content)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except (BadZipFile, InvalidFileException, KeyError, ParseError, OSError, IndexError) as exc:
+            raise HTTPException(status_code=422, detail="Не удалось прочитать файл XLSX") from exc
+        finally:
+            file.file.close()
+
+        added, existing, validation = repo.review_coverage(
+            links, kind, apply=apply, has_errors=bool(errors)
+        )
+        errors.extend(validation)
+        return {
+            "added": added,
+            "existing": existing,
+            "skipped": skipped,
+            "error_count": len(errors),
+            "errors": errors[:20],
+            "applied": apply and not errors,
+        }
 
     @admin.post("/import/{importer_name}")
     def import_file(importer_name: str, file: UploadFile) -> ImportReport:
