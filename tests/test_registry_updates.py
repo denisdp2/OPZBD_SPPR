@@ -1,5 +1,6 @@
 import asyncio
 import io
+from pathlib import Path
 
 import httpx
 import pytest
@@ -161,6 +162,21 @@ def test_official_download_reports_certificate_error(client, monkeypatch):
     response = client.get("/api/admin/registry/download/xml")
     assert response.status_code == 502
     assert "Сертификат" in response.json()["detail"]
+
+
+def test_blocked_official_download_has_local_xlsx_alternative(client, monkeypatch):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+
+    def blocked(target):
+        httpx.Response(403, request=httpx.Request("GET", "https://example.test")).raise_for_status()
+
+    monkeypatch.setattr("app.api.app.download_registry_xml", blocked)
+    response = client.post("/api/admin/registry/download/xml")
+    assert response.status_code == 502
+    assert "HTTP 403" in response.json()["detail"]
+    saved = client.post("/api/admin/registry/export.xlsx")
+    assert saved.status_code == 200
+    assert Path(saved.json()["path"]).read_bytes().startswith(b"PK")
 
 
 def test_discover_official_export_links_without_guessed_urls():

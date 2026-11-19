@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app import __version__, paths
 from app.auth.deps import COOKIE_NAME, current_user, require_admin, require_login
 from app.auth.schemas import (
+    AdminPasswordConfirmation,
     AdminProfileUpdate,
     AdminUserUpdate,
     AuthUser,
@@ -357,6 +358,28 @@ def create_app(
             headers={"Content-Disposition": f'attachment; filename="coverage-{kind}.xlsx"'},
         )
 
+    @admin.get("/items/{item_id}/coverage/suggestions")
+    def item_coverage_suggestions(item_id: str) -> dict:
+        item = repo.get_item(item_id)
+        number = item_id.removeprefix("ru-software-")
+        record = None
+        if item.kind == "tool" and item_id != number and number.isascii() and number.isdecimal():
+            if len(number) <= 18:
+                record = registry.store.get_record(int(number))
+        requirements = {req.id: req for req in repo.list_requirements()}
+        records = {item_id: record.model_dump()} if record else {}
+        rows = suggest_coverage([item], requirements, records)
+        return {
+            "item": item,
+            "requirements": list(requirements.values()),
+            "docs_url": record.docs_url if record else "",
+            "suggestions": [
+                {"id": code, "title": title, "reason": reason}
+                for _, code, _, title, reason, _, _ in rows
+                if code
+            ],
+        }
+
     @admin.post("/coverage/import")
     def import_coverage(file: UploadFile, kind: ItemKind = "tool", apply: bool = False) -> dict:
         if not isinstance(repo, SQLiteRepository):
@@ -460,6 +483,18 @@ def create_app(
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         return AuthUser(id=result.id, login=result.login, role=result.role)
 
+    @admin.delete("/users/{user_id}", status_code=204)
+    def delete_user(
+        user_id: int, body: AdminPasswordConfirmation, user: User = Depends(require_admin)
+    ) -> None:
+        if user_id == user.id:
+            raise HTTPException(status_code=409, detail="Нельзя удалить свой аккаунт")
+        result = auth.delete_user(user.id, user_id, body.current_password)
+        if result is False:
+            raise HTTPException(status_code=403, detail="Неверный пароль администратора")
+        if result is None:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+
     @admin.put("/profile")
     def update_profile(body: AdminProfileUpdate, user: User = Depends(require_admin)) -> AuthUser:
         try:
@@ -546,6 +581,22 @@ def create_app(
             headers={"Content-Disposition": 'attachment; filename="registry.xlsx"'},
         )
 
+    @admin.post("/registry/export.xlsx")
+    def save_local_registry_excel() -> dict:
+        cache = paths.data_dir() / "registry-cache" / "registry-local.xlsx"
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            content = export_registry_xlsx(registry.store.query("", "all", "reg_number", False))
+            with TemporaryDirectory(dir=cache.parent) as directory:
+                target = Path(directory) / cache.name
+                target.write_bytes(content)
+                target.replace(cache)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500, detail="Не удалось записать XLSX на диск."
+            ) from exc
+        return {"path": str(cache.resolve()), "cached": False}
+
     def save_registry_export(format: str) -> tuple[Path, bool]:
         cache = paths.data_dir() / "registry-cache" / f"registry.{format}"
         try:
@@ -561,9 +612,19 @@ def create_app(
         except (httpx.HTTPError, ValueError, OSError) as exc:
             if cache.is_file():
                 return cache, True
-            message = "Не удалось сохранить выгрузку реестра."
             if "CERTIFICATE_VERIFY_FAILED" in str(exc):
-                message += " Сертификат сайта не доверен этой системе."
+                message = "Сертификат официального сайта не доверен этой системе."
+            elif isinstance(exc, httpx.HTTPStatusError):
+                message = f"Официальный сайт вернул HTTP {exc.response.status_code}."
+            elif isinstance(exc, httpx.RequestError):
+                message = "Официальный сайт реестра недоступен."
+            elif isinstance(exc, ValueError):
+                message = f"{exc}."
+            else:
+                raise HTTPException(
+                    status_code=500, detail="Не удалось записать официальную выгрузку на диск."
+                ) from exc
+            message += " Можно сохранить XLSX из локальной базы."
             raise HTTPException(status_code=502, detail=message) from exc
 
     @admin.post("/registry/download/{format}")

@@ -35,9 +35,12 @@ class AdminProfileUpdate(BaseModel):
     new_password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
-class AdminUserUpdate(BaseModel):
-    role: Literal["admin", "user"]
+class AdminPasswordConfirmation(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
+
+
+class AdminUserUpdate(AdminPasswordConfirmation):
+    role: Literal["admin", "user"]
     new_password: str | None = Field(default=None, min_length=8, max_length=128)
 
 

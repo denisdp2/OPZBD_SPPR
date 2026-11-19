@@ -489,6 +489,7 @@ const itemCoverageForm = document.getElementById("item-coverage-form");
 const itemCoverageQuery = document.getElementById("item-coverage-query");
 const itemCoverageCount = document.getElementById("item-coverage-count");
 const itemCoverageOptions = document.getElementById("item-coverage-options");
+const itemCoverageSuggestions = document.getElementById("item-coverage-suggestions");
 const itemCoverageError = document.getElementById("item-coverage-error");
 const itemCoverageSave = itemCoverageForm.querySelector('button[type="submit"]');
 let itemCoverageItem;
@@ -496,16 +497,20 @@ let itemCoverageRequirements;
 let selectedRequirements;
 let itemCoverageBusy = false;
 
+function requirementOption({id, title, reason}) {
+  return `<label class="item-coverage-option">
+    <input type="checkbox" value="${esc(id)}" ${selectedRequirements.has(id) ? "checked" : ""}>
+    <span><strong>${esc(id)}</strong> ${esc(title)}
+      ${reason ? `<span class="item-coverage-reason">${esc(reason)}</span>` : ""}</span>
+  </label>`;
+}
+
 function renderItemCoverage() {
   const query = itemCoverageQuery.value.trim().toLocaleLowerCase("ru");
   const matches = itemCoverageRequirements.filter(({ id, title }) =>
     `${id} ${title}`.toLocaleLowerCase("ru").includes(query));
   itemCoverageCount.textContent = `Выбрано: ${selectedRequirements.size}`;
-  itemCoverageOptions.innerHTML = matches.length ? matches.map(({ id, title }) => `
-    <label class="item-coverage-option">
-      <input type="checkbox" value="${esc(id)}" ${selectedRequirements.has(id) ? "checked" : ""}>
-      <span><strong>${esc(id)}</strong> ${esc(title)}</span>
-    </label>`).join("") : "Требования не найдены.";
+  itemCoverageOptions.innerHTML = matches.length ? matches.map(requirementOption).join("") : "Требования не найдены.";
 }
 
 document.querySelector("main").addEventListener("click", async event => {
@@ -517,14 +522,16 @@ document.querySelector("main").addEventListener("click", async event => {
   itemCoverageQuery.value = "";
   itemCoverageCount.textContent = "";
   itemCoverageError.textContent = "";
+  itemCoverageSuggestions.hidden = true;
+  itemCoverageSuggestions.replaceChildren();
   document.getElementById("item-coverage-name").textContent = button.dataset.itemName;
   itemCoverageOptions.textContent = "Загрузка требований…";
   itemCoverageDialog.showModal();
   try {
-    const [item, requirements] = await Promise.all([
-      SZI.request(`/api/admin/items/${encodeURIComponent(button.dataset.itemCoverage)}`),
-      SZI.request("/api/requirements"),
-    ]);
+    const id = encodeURIComponent(button.dataset.itemCoverage);
+    const {item, requirements, suggestions, docs_url: docs} = await SZI.request(
+      `/api/admin/items/${id}/coverage/suggestions`,
+    );
     if (!itemCoverageDialog.open) return;
     itemCoverageItem = item;
     selectedRequirements = new Set(item.covers);
@@ -532,6 +539,10 @@ document.querySelector("main").addEventListener("click", async event => {
     itemCoverageRequirements = [...requirements, ...[...selectedRequirements]
       .filter(id => !known.has(id)).map(id => ({ id, title: "Нет в справочнике" }))]
       .sort((a, b) => Number(selectedRequirements.has(b.id)) - Number(selectedRequirements.has(a.id)));
+    itemCoverageSuggestions.innerHTML = `<h3>Предложения к проверке</h3>
+      ${suggestions.length ? suggestions.map(requirementOption).join("") : "<p>Для этой позиции нет новых предложений.</p>"}
+      ${docs ? sourceLink(docs, "Документация") : ""}`;
+    itemCoverageSuggestions.hidden = false;
     renderItemCoverage();
     itemCoverageQuery.disabled = itemCoverageSave.disabled = false;
     itemCoverageQuery.focus();
@@ -543,10 +554,14 @@ document.querySelector("main").addEventListener("click", async event => {
   }
 });
 itemCoverageQuery.addEventListener("input", renderItemCoverage);
-itemCoverageOptions.addEventListener("change", event => {
+itemCoverageForm.addEventListener("change", event => {
   const checkbox = event.target;
+  if (!checkbox.matches('input[type="checkbox"]')) return;
   if (checkbox.checked) selectedRequirements.add(checkbox.value);
   else selectedRequirements.delete(checkbox.value);
+  for (const option of itemCoverageForm.querySelectorAll('input[type="checkbox"]')) {
+    if (option.value === checkbox.value) option.checked = checkbox.checked;
+  }
   itemCoverageCount.textContent = `Выбрано: ${selectedRequirements.size}`;
 });
 itemCoverageForm.addEventListener("submit", async event => {
@@ -557,6 +572,7 @@ itemCoverageForm.addEventListener("submit", async event => {
   const cancel = itemCoverageForm.querySelector('[formmethod="dialog"]');
   itemCoverageSave.disabled = cancel.disabled = itemCoverageQuery.disabled = true;
   itemCoverageOptions.inert = true;
+  itemCoverageSuggestions.inert = true;
   itemCoverageError.textContent = "";
   try {
     await SZI.request(`/api/admin/items/${encodeURIComponent(itemCoverageItem.id)}/coverage`, {
@@ -572,6 +588,7 @@ itemCoverageForm.addEventListener("submit", async event => {
     itemCoverageBusy = false;
     itemCoverageSave.disabled = cancel.disabled = itemCoverageQuery.disabled = false;
     itemCoverageOptions.inert = false;
+    itemCoverageSuggestions.inert = false;
   }
 });
 itemCoverageDialog.addEventListener("cancel", event => {
@@ -632,24 +649,26 @@ document.querySelectorAll("[data-registry-state]").forEach(button => {
 });
 const downloadDialog = document.getElementById("registry-download-dialog");
 document.getElementById("registry-download").addEventListener("click", () => downloadDialog.showModal());
-document.querySelectorAll("[data-official-format]").forEach(control => control.addEventListener("click", async event => {
-  const button = event.currentTarget;
+const registryExportButtons = document.querySelectorAll("[data-registry-export]");
+registryExportButtons.forEach(control => control.addEventListener("click", async event => {
   const status = document.getElementById("registry-download-status");
-  const format = button.dataset.officialFormat;
+  const format = event.currentTarget.dataset.registryExport;
   const visit = registryVisit;
-  button.disabled = true;
+  registryExportButtons.forEach(button => button.disabled = true);
   downloadDialog.close();
-  status.textContent = `Скачивание ${format.toUpperCase()} с сайта реестра…`;
+  const local = format === "local";
+  const path = local ? "/api/admin/registry/export.xlsx" : `/api/admin/registry/download/${format}`;
+  status.textContent = local ? "Формируем XLSX из локальной базы…" : `Скачивание ${format.toUpperCase()} с сайта реестра…`;
   try {
-    const result = await SZI.request(`/api/admin/registry/download/${format}`, {method: "POST"});
+    const result = await SZI.request(path, {method: "POST"});
     if (visit !== registryVisit) return;
     status.textContent = result.cached
-      ? `Последняя сохранённая выгрузка: ${result.path}`
+      ? `Свежая выгрузка недоступна. Последняя сохранённая копия: ${result.path}`
       : `Файл сохранён: ${result.path}`;
   } catch (error) {
     if (visit === registryVisit) status.textContent = error.message;
   }
-  finally { button.disabled = false; }
+  finally { registryExportButtons.forEach(button => button.disabled = false); }
 }));
 
 document.getElementById("registry-search").addEventListener("submit", event => {
@@ -715,9 +734,11 @@ async function loadAdminProfile() {
     document.getElementById("admin-users").innerHTML = table(
       ["Логин", "Роль", ""],
       users.map(entry => `<tr><td>${esc(entry.login)}</td><td>${entry.role === "admin" ? "Администратор" : "Пользователь"}</td>
-        <td>${entry.id === user.id ? "" : `<button class="btn secondary" type="button"
+        <td class="row-actions">${entry.id === user.id ? "" : `<button class="btn secondary" type="button"
           data-user-id="${entry.id}" data-user-role="${esc(entry.role)}"
-          data-user-login="${esc(entry.login)}">Изменить</button>`}</td></tr>`),
+          data-user-login="${esc(entry.login)}">Изменить</button>
+          <button class="btn danger" type="button" data-delete-user="${entry.id}"
+            data-user-login="${esc(entry.login)}">Удалить</button>`}</td></tr>`),
     );
   } catch (error) {
     showFlash(document.getElementById("page-profile"), error.message);
@@ -752,6 +773,42 @@ adminProfileForm.addEventListener("submit", async event => {
 const adminUserDialog = document.getElementById("admin-user-dialog");
 const adminUserForm = document.getElementById("admin-user-form");
 const adminUserError = document.getElementById("admin-user-error");
+const adminUserDeleteDialog = document.getElementById("admin-user-delete-dialog");
+const adminUserDeleteForm = document.getElementById("admin-user-delete-form");
+const adminUserDeleteError = document.getElementById("admin-user-delete-error");
+
+document.getElementById("admin-users").addEventListener("click", event => {
+  const button = event.target.closest("[data-delete-user]");
+  if (!button) return;
+  adminUserDeleteForm.reset();
+  adminUserDeleteForm.dataset.userId = button.dataset.deleteUser;
+  document.getElementById("admin-user-delete-login").textContent = button.dataset.userLogin;
+  adminUserDeleteError.textContent = "";
+  adminUserDeleteDialog.showModal();
+});
+adminUserDeleteDialog.addEventListener("close", () => adminUserDeleteForm.reset());
+adminUserDeleteDialog.addEventListener("cancel", event => {
+  if (adminUserDeleteForm.inert) event.preventDefault();
+});
+adminUserDeleteForm.addEventListener("submit", async event => {
+  if (event.submitter?.formMethod === "dialog") return;
+  event.preventDefault();
+  if (adminUserDeleteForm.inert) return;
+  const body = JSON.stringify(Object.fromEntries(new FormData(adminUserDeleteForm)));
+  adminUserDeleteForm.inert = true;
+  adminUserDeleteError.textContent = "";
+  try {
+    await SZI.request(`/api/admin/users/${adminUserDeleteForm.dataset.userId}`, {method: "DELETE", body});
+    adminUserDeleteDialog.close();
+    await loadAdminProfile();
+    showFlash(document.getElementById("page-profile"), "Пользователь удалён.", true);
+  } catch (error) {
+    adminUserDeleteError.textContent = error.message;
+  } finally {
+    adminUserDeleteForm.inert = false;
+    adminUserDeleteForm.elements.current_password.value = "";
+  }
+});
 
 document.getElementById("admin-users").addEventListener("click", event => {
   const button = event.target.closest("[data-user-id]");

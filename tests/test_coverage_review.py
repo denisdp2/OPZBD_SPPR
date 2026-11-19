@@ -60,6 +60,19 @@ def test_export_is_for_admin_and_leaves_suggestions_unconfirmed(client):
     assert repo.get_item("ru-software-17").covers == ["ИАФ.3"]
 
 
+def test_suggestions_for_editor_use_same_rules_without_saving(client):
+    repo = seed(client)
+    registry_url = "/api/admin/items/ru-software-17/coverage/suggestions"
+    assert client.get(registry_url).status_code == 401
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    result = client.get(registry_url).json()
+    assert result["item"]["covers"] == ["ИАФ.3"]
+    assert [suggestion["id"] for suggestion in result["suggestions"]] == ["АВЗ.1"]
+    assert "03.06" in result["suggestions"][0]["reason"]
+    assert repo.get_item("ru-software-17").covers == ["ИАФ.3"]
+    assert client.get("/api/admin/items/vr/coverage/suggestions").json()["suggestions"] == []
+
+
 def test_preview_invalid_and_confirmed_import(client):
     repo = seed(client)
     client.post("/api/auth/login", json={"login": "admin", "password": "admin"})

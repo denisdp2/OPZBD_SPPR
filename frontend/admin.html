@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Администратор — СППР</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-3">
+  <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-4">
 </head>
 <body>
   <div class="layout">
@@ -89,8 +89,9 @@
         <dialog id="registry-download-dialog">
           <h2>Скачать реестр</h2>
           <div class="toolbar">
-            <button class="btn" data-official-format="xml" type="button">XML</button>
-            <button class="btn" data-official-format="xls" type="button">XLS</button>
+            <button class="btn secondary" data-registry-export="xml" type="button">Официальный XML</button>
+            <button class="btn secondary" data-registry-export="xls" type="button">Официальный XLS</button>
+            <button class="btn" data-registry-export="local" type="button">XLSX из локальной базы</button>
             <form method="dialog"><button class="btn secondary">Закрыть</button></form>
           </div>
         </dialog>
@@ -155,6 +156,7 @@
           <form id="item-coverage-form">
             <h2 id="item-coverage-title">Изменить требования</h2>
             <p id="item-coverage-name"></p>
+            <div id="item-coverage-suggestions" hidden></div>
             <label for="item-coverage-query">Поиск требования по коду или названию</label>
             <input id="item-coverage-query" type="search">
             <p id="item-coverage-count" role="status"></p>
@@ -225,6 +227,19 @@
             <div id="admin-user-error" role="status"></div>
           </form>
         </dialog>
+        <dialog id="admin-user-delete-dialog" aria-labelledby="admin-user-delete-title">
+          <form id="admin-user-delete-form">
+            <h2 id="admin-user-delete-title">Удалить пользователя?</h2>
+            <p>Аккаунт <strong id="admin-user-delete-login"></strong> и его сохранённый сценарий будут удалены. Активные сессии завершатся.</p>
+            <label for="admin-user-delete-password">Ваш пароль администратора</label>
+            <input id="admin-user-delete-password" name="current_password" type="password" autocomplete="current-password" required maxlength="128">
+            <div class="toolbar">
+              <button class="btn secondary" type="submit" formmethod="dialog" formnovalidate>Отмена</button>
+              <button class="btn danger" type="submit">Удалить пользователя</button>
+            </div>
+            <div id="admin-user-delete-error" role="alert"></div>
+          </form>
+        </dialog>
       </section>
       <dialog id="catalog-delete-dialog" aria-labelledby="catalog-delete-title">
         <form method="dialog">
@@ -255,6 +270,6 @@
     </main>
   </div>
   <script src="/static/js/api.js"></script>
-  <script src="/static/js/admin.js?v=coverage-review-3"></script>
+  <script src="/static/js/admin.js?v=coverage-review-4"></script>
 </body>
 </html>

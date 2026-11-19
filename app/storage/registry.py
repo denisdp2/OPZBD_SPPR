@@ -61,6 +61,11 @@ class RegistryStore:
                 for (data,) in con.execute("SELECT data FROM registry")
             ]
 
+    def get_record(self, number: int) -> RegistryRecord | None:
+        with closing(sqlite3.connect(self.path)) as con:
+            row = con.execute("SELECT data FROM registry WHERE reg_number=?", (number,)).fetchone()
+        return RegistryRecord.model_validate_json(row[0]) if row else None
+
     def list_records(self) -> list[dict]:
         with closing(sqlite3.connect(self.path)) as con:
             return [
