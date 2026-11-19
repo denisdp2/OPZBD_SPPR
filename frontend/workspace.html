@@ -7,8 +7,8 @@
   <meta name="description" content="Подбор средств и организационных мер защиты информации">
   <title>Сценарий и состав — СППР</title>
   <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-6">
-  <link rel="stylesheet" href="/static/assets/css/workspace.css?v=admin-layout-1">
-  <script type="module" src="/static/assets/js/pages/workspace-page.js?v=admin-layout-1"></script>
+  <link rel="stylesheet" href="/static/assets/css/workspace.css?v=composition-2">
+  <script type="module" src="/static/assets/js/pages/workspace-page.js?v=composition-2"></script>
 </head>
 <body>
   <div class="layout workspace-layout">
@@ -51,27 +51,33 @@
             <div class="mandatory-indicator" id="mandatory-indicator"><div><strong id="mandatory-status-title">Оцените текущий набор</strong><p id="mandatory-status-text">После расчёта здесь появится результат проверки обязательных требований.</p></div></div>
           </article>
           <article class="card selected-summary-panel">
-            <div class="panel-heading"><div><h2>Кандидаты</h2></div><button type="button" class="btn secondary compact-button" data-page="builder">Изменить</button></div>
+            <div class="panel-heading"><div><h2>Кандидаты</h2></div><button type="button" class="btn secondary compact-button" data-page="builder" data-builder-view="selected">Открыть выбранное</button></div>
             <div id="overview-selected-list" class="mini-item-list"></div>
             <div class="selected-summary-footer"><span>Стоимость за выбранный период</span><strong id="overview-total-cost">0 ₽</strong></div>
           </article>
         </div>
       </section>
 
-      <section class="page-section" id="page-builder" data-page-section="builder">
+      <p id="workspace-loading" role="status">Загружаем справочники…</p>
+      <section class="page-section" id="page-builder" data-page-section="builder" inert>
         <div class="top heading-with-action">
           <div><h1>Сценарий и состав</h1></div>
           <button type="button" class="btn secondary" id="refresh-data">Обновить справочники</button>
         </div>
 
 
+        <div class="toolbar builder-tabs" role="group" aria-label="Сценарий и состав">
+          <button class="btn" type="button" data-builder-view="scenario" aria-pressed="true">Параметры</button>
+          <button class="btn secondary" type="button" data-builder-view="catalog" aria-pressed="false">Каталог</button>
+          <button class="btn secondary" id="selected-items-tab" type="button" data-builder-view="selected" aria-pressed="false">Выбранное (0)</button>
+        </div>
         <div class="builder-layout">
-          <aside class="card scenario-panel">
+          <section class="card scenario-panel" data-builder-panel="scenario">
             <div class="panel-heading"><div><h2>Параметры сценария</h2></div></div>
             <label class="control-label" for="profile-select">Профиль обязательности</label>
             <select id="profile-select" class="select-control"></select>
             <details class="profile-details"><summary>О профиле</summary><p class="control-help" id="profile-description"></p></details>
-            <div class="field-grid"><div><label class="control-label" for="period-input">Период расчёта</label><div class="input-suffix"><input id="period-input" class="text-control" type="number" min="0.1" max="120" step="0.1" value="12"><span>мес.</span></div></div><div><label class="control-label" for="currency-label">Валюта</label><div class="static-control" id="currency-label">RUB · ₽</div></div></div>
+            <div class="scenario-period"><label class="control-label" for="period-input">Период расчёта, мес.</label><input id="period-input" class="text-control" type="number" min="0.1" max="120" step="0.1" value="12"></div>
             <div class="panel-divider"></div>
             <div class="requirements-heading"><div><h3>Требования</h3><p><span id="requirements-selected-count">0</span> из <span id="requirements-total-count">0</span> выбрано</p></div><button class="text-button" id="toggle-requirements" type="button">Выбрать все</button></div>
             <label class="search-box requirements-search"><input id="requirement-search" type="search" placeholder="Найти по коду или названию…" aria-label="Поиск требований"></label>
@@ -79,14 +85,38 @@
             <div class="requirement-scope-tabs" role="group" aria-label="Фильтр обязательности"><button type="button" class="requirement-scope-tab is-active" data-requirement-filter="all">Все</button><button type="button" class="requirement-scope-tab" data-requirement-filter="mandatory">Обязательные</button><button type="button" class="requirement-scope-tab" data-requirement-filter="optional">Дополнительные</button></div>
             <div id="requirements-list" class="requirements-list"></div>
             <div class="scenario-footer"><div><span>Обязательные в расчёте</span><strong id="mandatory-in-scenario">0</strong></div><div><span>Исключено из расчёта</span><strong id="excluded-in-scenario">0</strong></div></div>
-          </aside>
+            <button class="btn scenario-next" type="button" data-builder-view="catalog">Перейти в каталог</button>
+          </section>
 
-          <section class="card catalog-panel">
+          <section class="card catalog-panel" data-builder-panel="catalog" hidden>
             <div class="panel-heading catalog-head"><div><h2>Средства и организационные меры</h2></div></div>
-            <div class="catalog-toolbar"><label class="search-box"><input id="catalog-search" type="search" placeholder="Найти средство или меру…" aria-label="Поиск по каталогу"></label><label class="catalog-page-size">Показывать<select id="catalog-page-size" aria-label="Сколько позиций показывать"><option value="20">20</option><option value="40">40</option><option value="60" selected>60</option><option value="100">100</option><option value="all">Все</option></select></label><div class="catalog-tabs" role="group" aria-label="Тип позиции"><button type="button" class="catalog-tab is-active" data-kind="all">Все</button><button type="button" class="catalog-tab" data-kind="tool">Средства защиты</button><button type="button" class="catalog-tab" data-kind="org">Оргмеры</button></div></div>
+            <div class="catalog-toolbar"><label class="search-box"><input id="catalog-search" type="search" placeholder="Найти средство или меру…" aria-label="Поиск по каталогу"></label><label class="catalog-page-size">На странице<select id="catalog-page-size" aria-label="Позиций на странице"><option value="20" selected>20</option><option value="40">40</option><option value="60">60</option><option value="100">100</option></select></label><div class="catalog-tabs" role="group" aria-label="Тип позиции"><button type="button" class="catalog-tab is-active" data-kind="all">Все</button><button type="button" class="catalog-tab" data-kind="tool">Средства защиты</button><button type="button" class="catalog-tab" data-kind="org">Оргмеры</button></div></div>
+            <div class="catalog-footer">
+              <button type="button" class="btn secondary" id="catalog-select-page" disabled>Выбрать всю страницу</button>
+              <div class="toolbar catalog-pagination" aria-label="Страницы каталога" role="group">
+                <button type="button" class="btn secondary" data-catalog-step="-1" disabled>Назад</button>
+                <span id="catalog-visible-count" role="status"></span>
+                <button type="button" class="btn secondary" data-catalog-step="1" disabled>Далее</button>
+              </div>
+            </div>
             <div id="catalog-list" class="catalog-list"></div>
-            <button type="button" class="btn secondary" id="catalog-show-more" hidden>Показать ещё</button>
-            <div class="catalog-footer"><span id="catalog-visible-count">Показаны все позиции</span><button type="button" class="btn secondary compact-button" id="clear-selection">Очистить выбранные</button></div>
+          </section>
+          <section class="card selected-panel" data-builder-panel="selected" hidden>
+            <div class="panel-heading">
+              <h2>Выбранное</h2>
+              <button type="button" class="btn secondary" id="clear-selection" disabled>Очистить выбор</button>
+            </div>
+            <p class="control-help" id="selected-cost-hint" hidden>Укажите 0, если затрат по позиции нет.</p>
+            <div class="toolbar catalog-pagination" id="selected-pagination" aria-label="Страницы выбранного" role="group" hidden>
+              <button type="button" class="btn secondary" data-selected-step="-1" disabled>Назад</button>
+              <span id="selected-visible-count" role="status"></span>
+              <button type="button" class="btn secondary" data-selected-step="1" disabled>Далее</button>
+            </div>
+            <div id="selected-list" class="selected-list"></div>
+            <div id="selected-empty" class="empty-state">
+              <p>Добавьте средства или меры из каталога.</p>
+              <button type="button" class="btn secondary scenario-next" data-builder-view="catalog">Открыть каталог</button>
+            </div>
           </section>
         </div>
         <div class="card builder-actions"><div class="builder-cost"><span>Оценка стоимости за <strong id="builder-period-label">12 мес.</strong></span><strong id="builder-total-cost">0 ₽</strong></div><div class="button-row"><button type="button" class="btn secondary" data-page="evaluation">Оценить набор</button><button type="button" class="btn" data-page="optimization">К оптимизации</button></div></div>

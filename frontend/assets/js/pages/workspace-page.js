@@ -16,7 +16,10 @@ const state = {
   periodMonths: 12,
   activeKind: "all",
   search: "",
-  catalogLimit: 60,
+  builderView: "scenario",
+  catalogPage: 0,
+  selectedPage: 0,
+  catalogPageItems: [],
   requirementSearch: "",
   requirementGroup: "all",
   requirementFilter: "all",
@@ -33,8 +36,13 @@ const state = {
   initializedOnce: false,
 };
 
+let itemsById = new Map();
+let requirementsById = new Map();
+let catalogFilter;
+
 const currency = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 });
 const number = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+const periodNumber = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 function money(value) {
   return currency.format(Number.isFinite(Number(value)) ? Number(value) : 0);
@@ -61,11 +69,15 @@ function priceFor(item) {
   return state.prices.get(item.id) ?? { capex: "", opex_month: "" };
 }
 
-function hasMissingCosts() {
-  return selectedItems().some(({ costs }) => (
-    costs.capex === "" || costs.capex === null || costs.capex === undefined ||
-    costs.opex_month === "" || costs.opex_month === null || costs.opex_month === undefined
-  ));
+function requireCandidatePrices() {
+  const missing = [...state.candidates.values()].findIndex(({ capex, opex_month }) =>
+    capex == null || capex === "" || opex_month == null || opex_month === "");
+  if (missing === -1) return true;
+  showToast("Заполните стоимость выбранных позиций. Если затрат нет, укажите 0.", "error");
+  state.selectedPage = Math.floor(missing / SELECTED_PAGE_SIZE);
+  navigateTo("builder");
+  showBuilderView("selected");
+  return false;
 }
 
 function mandatoryRequirementsAreIncluded() {
@@ -80,7 +92,7 @@ function candidateCost(candidate, period = state.periodMonths) {
 function selectedItems() {
   return [...state.candidates.entries()]
     .map(([itemId, costs]) => {
-      const item = state.items.find((entry) => entry.id === itemId);
+      const item = itemsById.get(itemId);
       return item ? { item, costs, total: candidateCost(costs) } : null;
     })
     .filter(Boolean);
@@ -97,7 +109,7 @@ function scenarioFor(itemIds = [...state.candidates.keys()]) {
     period_months: Math.max(0.1, Math.round((Number(state.periodMonths) || 12) * 10) / 10),
     requirements: [...new Set([...state.selectedRequirements, ...mandatoryIds()])],
     candidates: itemIds.map((itemId) => {
-      const costs = state.candidates.get(itemId) ?? priceFor(state.items.find((item) => item.id === itemId) ?? {});
+      const costs = state.candidates.get(itemId) ?? priceFor(itemsById.get(itemId) ?? {});
       return { item_id: itemId, capex: Number(costs.capex) || 0, opex_month: Number(costs.opex_month) || 0 };
     }),
   };
@@ -338,71 +350,113 @@ function renderRequirements() {
   }
 }
 
-const CATALOG_PAGE_SIZE = 60;
+const SELECTED_PAGE_SIZE = 20;
 
-function catalogPageSize() {
-  const value = $("#catalog-page-size")?.value ?? String(CATALOG_PAGE_SIZE);
-  return value === "all" ? Number.POSITIVE_INFINITY : Number(value) || CATALOG_PAGE_SIZE;
+function filterCatalog() {
+  const search = state.search.trim().toLocaleLowerCase("ru");
+  if (catalogFilter?.search === search && catalogFilter.kind === state.activeKind) {
+    return catalogFilter.items;
+  }
+  const items = state.items.filter((item) => {
+    if (state.activeKind !== "all" && item.kind !== state.activeKind) return false;
+    if (!search) return true;
+    const linked = (item.covers ?? []).map((id) => {
+      const requirement = requirementsById.get(id);
+      return `${id} ${requirement?.title ?? ""} ${requirement?.group ?? ""}`;
+    }).join(" ");
+    const registry = item.in_ru_software_registry ? "российское по реестр" : "";
+    return [item.name, item.description, item.id, item.vendor, item.fstec_cert_no, linked, registry]
+      .join(" ").toLocaleLowerCase("ru").includes(search);
+  });
+  catalogFilter = { search, kind: state.activeKind, items };
+  return items;
+}
+
+function renderItem(item, editCosts = false) {
+  const selected = state.candidates.has(item.id);
+  const costs = state.candidates.get(item.id);
+  const covers = (item.covers ?? []).map((id) => {
+    const req = requirementsById.get(id);
+    const title = req ? `${req.id} · ${req.title}` : `${id} · требование отсутствует в справочнике`;
+    return `<span class="cover-chip" title="${escapeHtml(title)}">${escapeHtml(id)}</span>`;
+  }).join("");
+  const facts = item.kind === "tool" ? `
+    <div class="item-facts" aria-label="Сведения о средстве защиты">
+      <span class="item-fact ${item.fstec_certified ? "is-positive" : "is-muted"}">${item.fstec_certified ? `Сертификат ФСТЭК${item.fstec_cert_no ? ` · № ${escapeHtml(item.fstec_cert_no)}` : ""}${item.fstec_cert_valid_until ? ` · до ${escapeHtml(item.fstec_cert_valid_until)}` : ""}` : "Без сертификата ФСТЭК"}</span>
+      <span class="item-fact ${item.in_ru_software_registry ? "is-positive" : "is-muted"}">${item.in_ru_software_registry ? "В реестре российского ПО" : "Не в реестре российского ПО"}</span>
+      ${item.vendor ? `<span class="item-fact">Производитель: ${escapeHtml(item.vendor)}</span>` : ""}
+    </div>` : (item.implement_days !== null && item.implement_days !== undefined
+      ? `<div class="item-facts"><span class="item-fact">Срок внедрения: ${escapeHtml(item.implement_days)} дн.</span></div>` : "");
+  return `<article class="catalog-item${selected ? " is-selected" : ""}">
+    <div class="catalog-item-main">
+      <div class="catalog-item-title-row"><strong class="catalog-item-title">${escapeHtml(item.name)}</strong><span class="kind-tag${item.kind === "org" ? " kind-org" : ""}">${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</span></div>
+      <details class="catalog-details">
+        <summary>Сведения</summary>
+        ${item.description ? `<p class="catalog-description">${escapeHtml(item.description)}</p>` : ""}
+        ${facts}
+        <div class="covers-row">${covers || '<span class="cover-chip cover-chip-empty">Нет связанных требований</span>'}</div>
+      </details>
+      ${editCosts ? `<div class="cost-editor">
+        <label>Внедрение, ₽<input type="number" min="0" step="1" placeholder="0" value="${costs.capex === null || costs.capex === undefined ? "" : escapeHtml(costs.capex)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="capex" aria-label="Стоимость внедрения: ${escapeHtml(item.name)}"></label>
+        <label>Эксплуатация в месяц, ₽<input type="number" min="0" step="1" placeholder="0" value="${costs.opex_month === null || costs.opex_month === undefined ? "" : escapeHtml(costs.opex_month)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="opex_month" aria-label="Стоимость эксплуатации в месяц: ${escapeHtml(item.name)}"></label>
+      </div>` : ""}
+    </div>
+    <button type="button" class="btn ${selected ? "secondary " : ""}compact-button" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? "Убрать" : "Добавить"}</button>
+  </article>`;
+}
+
+function pageItems(items, pageKey, size, controls) {
+  const last = Math.max(0, Math.ceil(items.length / size) - 1);
+  const page = Math.min(last, Math.max(0, state[pageKey]));
+  state[pageKey] = page;
+  const start = page * size;
+  $(controls.prev).disabled = page === 0;
+  $(controls.next).disabled = page === last;
+  $(controls.count).textContent = items.length
+    ? `${number.format(start + 1)}–${number.format(Math.min(start + size, items.length))} из ${number.format(items.length)}`
+    : "Нет позиций";
+  return items.slice(start, start + size);
 }
 
 function renderCatalog() {
-  const list = $("#catalog-list");
-  if (!list) return;
-  const search = state.search.trim().toLocaleLowerCase("ru");
-  const filtered = state.items.filter((item) => {
-    const kindMatches = state.activeKind === "all" || item.kind === state.activeKind;
-    const linkedRequirements = (item.covers ?? []).map((id) => {
-      const req = state.requirements.find((entry) => entry.id === id);
-      return `${id} ${req?.title ?? ""} ${req?.group ?? ""}`;
-    }).join(" ");
-    const searchable = `${item.name} ${item.description ?? ""} ${item.id} ${item.vendor ?? ""} ${item.fstec_cert_no ?? ""} ${linkedRequirements} ${item.in_ru_software_registry ? "российское по реестр" : ""}`.toLocaleLowerCase("ru");
-    return kindMatches && (!search || searchable.includes(search));
+  const visible = pageItems(filterCatalog(), "catalogPage", Number($("#catalog-page-size").value), {
+    prev: '[data-catalog-step="-1"]', next: '[data-catalog-step="1"]', count: "#catalog-visible-count",
   });
-  const visible = filtered.slice(0, state.catalogLimit);
-  list.innerHTML = visible.map((item) => {
-    const selected = state.candidates.has(item.id);
-    const costs = selected ? state.candidates.get(item.id) : priceFor(item);
-    const covers = (item.covers ?? []).map((id) => {
-      const req = state.requirements.find((entry) => entry.id === id);
-      const title = req ? `${req.id} · ${req.title}` : `${id} · требование отсутствует в справочнике`;
-      return `<span class="cover-chip" title="${escapeHtml(title)}">${escapeHtml(id)}</span>`;
-    }).join("");
-    const facts = item.kind === "tool" ? `
-      <div class="item-facts" aria-label="Сведения о средстве защиты">
-        <span class="item-fact ${item.fstec_certified ? "is-positive" : "is-muted"}">${item.fstec_certified ? `Сертификат ФСТЭК${item.fstec_cert_no ? ` · № ${escapeHtml(item.fstec_cert_no)}` : ""}${item.fstec_cert_valid_until ? ` · до ${escapeHtml(item.fstec_cert_valid_until)}` : ""}` : "Без сертификата ФСТЭК"}</span>
-        <span class="item-fact ${item.in_ru_software_registry ? "is-positive" : "is-muted"}">${item.in_ru_software_registry ? "В реестре российского ПО" : "Не в реестре российского ПО"}</span>
-        ${item.vendor ? `<span class="item-fact">Производитель: ${escapeHtml(item.vendor)}</span>` : ""}
-      </div>` : (item.implement_days !== null && item.implement_days !== undefined
-        ? `<div class="item-facts"><span class="item-fact">Срок внедрения: ${escapeHtml(item.implement_days)} дн.</span></div>` : "");
-    return `<article class="catalog-item${selected ? " is-selected" : ""}">
-      <div class="catalog-item-main">
-        <div class="catalog-item-title-row"><strong class="catalog-item-title">${escapeHtml(item.name)}</strong><span class="kind-tag${item.kind === "org" ? " kind-org" : ""}">${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</span></div>
-        <details class="catalog-details">
-          <summary>Сведения</summary>
-          ${item.description ? `<p class="catalog-description">${escapeHtml(item.description)}</p>` : ""}
-          ${facts}
-          <div class="covers-row">${covers || '<span class="cover-chip cover-chip-empty">Нет связанных требований</span>'}</div>
-        </details>
-        ${selected ? `<div class="cost-editor">
-          <label>Внедрение, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.capex === null || costs.capex === undefined ? "" : escapeHtml(costs.capex)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="capex" aria-label="Стоимость внедрения: ${escapeHtml(item.name)}"><span>₽</span></span></label>
-          <label>Эксплуатация в месяц, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.opex_month === null || costs.opex_month === undefined ? "" : escapeHtml(costs.opex_month)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="opex_month" aria-label="Стоимость эксплуатации в месяц: ${escapeHtml(item.name)}"><span>₽</span></span></label>
-        </div>` : ""}
-      </div>
-      <button type="button" class="btn ${selected ? "secondary " : ""}compact-button" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? "Убрать" : "Добавить"}</button>
-    </article>`;
-  }).join("") || `<div class="empty-state"><strong>${state.items.length ? "Ничего не найдено" : "Каталог пока пуст"}</strong><p>${state.items.length ? "Измените запрос или выберите другую категорию." : "Импортируйте стартовый набор и выгрузку реестра через административный раздел."}</p></div>`;
-  $("#catalog-show-more").hidden = visible.length >= filtered.length;
-  const toolCount = state.items.filter((item) => item.kind === "tool").length;
-  const orgCount = state.items.filter((item) => item.kind === "org").length;
-  const allTab = $('[data-kind="all"]');
-  const toolTab = $('[data-kind="tool"]');
-  const orgTab = $('[data-kind="org"]');
-  if (allTab) allTab.textContent = `Все (${state.items.length})`;
-  if (toolTab) toolTab.textContent = `Средства (${toolCount})`;
-  if (orgTab) orgTab.textContent = `Оргмеры (${orgCount})`;
-  $("#catalog-visible-count").textContent = filtered.length > visible.length
-    ? `Показано ${visible.length} из ${filtered.length}`
-    : `Показано ${filtered.length} из ${state.items.length}`;
+  state.catalogPageItems = visible;
+  $("#catalog-list").innerHTML = visible.map((item) => renderItem(item)).join("") ||
+    '<p class="empty-state">По выбранным условиям ничего не найдено.</p>';
+  $("#catalog-select-page").disabled = visible.every((item) => state.candidates.has(item.id));
+}
+
+function renderSelected() {
+  const items = [...state.candidates.keys()].map((id) => itemsById.get(id)).filter(Boolean);
+  const visible = pageItems(items, "selectedPage", SELECTED_PAGE_SIZE, {
+    prev: '[data-selected-step="-1"]', next: '[data-selected-step="1"]', count: "#selected-visible-count",
+  });
+  $("#selected-list").innerHTML = visible.map((item) => renderItem(item, true)).join("");
+  $("#selected-empty").hidden = items.length > 0;
+  $("#selected-cost-hint").hidden = items.length === 0;
+  $("#selected-pagination").hidden = items.length <= SELECTED_PAGE_SIZE;
+  $("#clear-selection").disabled = items.length === 0;
+}
+
+function renderComposition() {
+  $("#selected-items-tab").textContent = `Выбранное (${number.format(state.candidates.size)})`;
+  if (state.builderView === "catalog") renderCatalog();
+  if (state.builderView === "selected") renderSelected();
+}
+
+function showBuilderView(name) {
+  state.builderView = name;
+  $$('[data-builder-panel]').forEach((panel) => { panel.hidden = panel.dataset.builderPanel !== name; });
+  $$('.builder-tabs [data-builder-view]').forEach((button) => {
+    const active = button.dataset.builderView === name;
+    button.classList.toggle("secondary", !active);
+    button.setAttribute("aria-pressed", String(active));
+    if (active) button.focus({ preventScroll: true });
+  });
+  renderComposition();
+  window.scrollTo({ top: 0 });
 }
 
 function renderOverview() {
@@ -415,7 +469,7 @@ function renderOverview() {
   $("#stat-mandatory").textContent = String(mandatoryIds().length);
   $("#stat-items").textContent = String(selected.length);
   $("#stat-cost").textContent = money(totalSelectedCost());
-  $("#stat-period").textContent = `За ${number.format(state.periodMonths)} ${state.periodMonths === 1 ? "месяц" : state.periodMonths < 5 ? "месяца" : "месяцев"}`;
+  $("#stat-period").textContent = `За ${periodNumber.format(state.periodMonths)} мес.`;
   $("#coverage-percent").textContent = evaluation ? `${coveragePercent}%` : "—";
   $("#coverage-ring").style.setProperty("--coverage", String(coveragePercent));
   $("#covered-count").textContent = evaluation ? String(evaluation.covered.length) : "—";
@@ -459,7 +513,7 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
   const covered = new Set(result.covered ?? []);
   const coveredBy = result.covered_by ?? {};
   $("#evaluation-cost").textContent = money(result.total_cost);
-  $("#evaluation-cost-period").textContent = `За ${number.format(state.periodMonths)} месяцев`;
+  $("#evaluation-cost-period").textContent = `За ${periodNumber.format(state.periodMonths)} мес.`;
   $("#evaluation-covered").textContent = `${covered.size} из ${requiredSet.size}`;
   $("#evaluation-mandatory").textContent = `${mandatory.size - (result.uncovered_mandatory ?? []).length} из ${mandatory.size}`;
   $("#evaluation-mandatory-foot").textContent = result.all_mandatory_covered ? "Все обязательные закрыты" : `Не закрыто: ${(result.uncovered_mandatory ?? []).length}`;
@@ -474,7 +528,7 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
   $("#evaluation-banner-status").textContent = source === "server" ? "Расчёт API" : "Примерный расчёт";
   const rows = state.requirements.filter((req) => requiredSet.has(req.id)).map((req) => {
     const isCovered = covered.has(req.id);
-    const itemNames = (coveredBy[req.id] ?? []).map((itemId) => state.items.find((item) => item.id === itemId)?.name ?? itemId);
+    const itemNames = (coveredBy[req.id] ?? []).map((itemId) => itemsById.get(itemId)?.name ?? itemId);
     return `<tr>
       <td><strong>${escapeHtml(req.id)}</strong> ${escapeHtml(req.title)}${mandatory.has(req.id) ? ' <span class="mandatory-pill">Обязательное</span>' : ""}<div class="result-req-meta">${escapeHtml(req.group || req.source || "")}</div></td>
       <td class="${isCovered ? "is-covered" : "is-uncovered"}">${isCovered ? escapeHtml(itemNames.join(", ") || "Закрыто") : "Не закрыто"}</td>
@@ -492,7 +546,7 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
 function updateBuilderSummary() {
   const total = totalSelectedCost();
   $("#builder-total-cost").textContent = money(total);
-  $("#builder-period-label").textContent = `${number.format(state.periodMonths)} ${state.periodMonths === 1 ? "месяц" : state.periodMonths < 5 ? "месяца" : "месяцев"}`;
+  $("#builder-period-label").textContent = `${periodNumber.format(state.periodMonths)} мес.`;
 }
 
 function renderOptimizerOptions() {
@@ -587,7 +641,6 @@ function renderPareto(solutions, selectedSolution = state.lastOptimization) {
     const color = active ? "#18825b" : entry.feasible ? "#3169e8" : "#d79a2b";
     return `<g><title>Стоимость: ${escapeHtml(money(entry.cost))}; закрыто требований: ${entry.covered_count}; ${entry.feasible ? "допустимый вариант" : "не все обязательные требования закрыты"}</title><circle cx="${px}" cy="${py}" r="${active ? 6 : 4.5}" fill="${color}" fill-opacity="${active ? 1 : .82}" stroke="#fff" stroke-width="2"/></g>`;
   }).join("");
-  const maxCoverage = Math.max(...solutions.map((entry) => Number(entry.covered_count) || 0));
   const labels = `<text x="${left + plotWidth / 2}" y="258" text-anchor="middle" fill="#77849a" font-size="10">Стоимость за период, ₽</text><text transform="translate(15 ${top + plotHeight / 2}) rotate(-90)" text-anchor="middle" fill="#77849a" font-size="10">Закрыто требований</text><text x="${left}" y="229" text-anchor="start" fill="#8793a7" font-size="10">0</text><text x="${left + plotWidth}" y="229" text-anchor="end" fill="#8793a7" font-size="10">${escapeHtml(number.format(maxCost))}</text>`;
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="График стоимости и числа закрытых требований">${grid}<line x1="${left}" y1="${top}" x2="${left}" y2="${top + plotHeight}" stroke="#ccd4e1"/><line x1="${left}" y1="${top + plotHeight}" x2="${left + plotWidth}" y2="${top + plotHeight}" stroke="#ccd4e1"/>${frontier}${points}${labels}</svg>`;
 }
@@ -596,7 +649,7 @@ function renderAll() {
   renderApiState();
   renderProfileOptions();
   renderRequirements();
-  renderCatalog();
+  renderComposition();
   renderOverview();
   updateBuilderSummary();
   renderEvaluation();
@@ -607,6 +660,7 @@ function invalidateResults() {
   state.lastEvaluation = null;
   state.resultSource = "none";
   state.lastOptimization = null;
+  if (state.lastPareto.length) renderPareto([]);
   state.lastPareto = [];
   $("#solution-empty").hidden = false;
   $("#solution-result").hidden = true;
@@ -637,13 +691,10 @@ async function runEvaluation() {
   if (!state.selectedRequirements.size) {
     showToast("Выберите хотя бы одно требование для оценки.", "error");
     navigateTo("builder");
+    showBuilderView("scenario");
     return;
   }
-  if (state.candidates.size && hasMissingCosts()) {
-    showToast("Заполните стоимость внедрения и эксплуатации для каждой выбранной позиции. Если затраты отсутствуют, укажите 0.", "error");
-    navigateTo("builder");
-    return;
-  }
+  if (!requireCandidatePrices()) return;
   state.isCalculating = true;
   const button = $("#run-evaluation");
   setLoading(button, true, "Считаем…");
@@ -677,18 +728,16 @@ async function runOptimization() {
   if (!state.selectedRequirements.size) {
     showToast("Сначала выберите требования.", "error");
     navigateTo("builder");
+    showBuilderView("scenario");
     return;
   }
   if (!state.candidates.size) {
     showToast("Добавьте в набор хотя бы одно средство или организационную меру.", "error");
     navigateTo("builder");
+    showBuilderView("catalog");
     return;
   }
-  if (hasMissingCosts()) {
-    showToast("Заполните стоимость внедрения и эксплуатации для каждой выбранной позиции. Если затраты отсутствуют, укажите 0.", "error");
-    navigateTo("builder");
-    return;
-  }
+  if (!requireCandidatePrices()) return;
   const mode = $("input[name='opt-mode']:checked")?.value ?? "min_cost";
   const budget = mode === "max_coverage" ? Number($("#budget-input").value) : null;
   if (mode === "max_coverage" && (!Number.isFinite(budget) || budget < 0)) {
@@ -825,12 +874,18 @@ function selectItem(itemId) {
   if (state.candidates.has(itemId)) {
     state.candidates.delete(itemId);
   } else {
-    const item = state.items.find((entry) => entry.id === itemId);
+    const item = itemsById.get(itemId);
     if (!item) return;
     state.candidates.set(itemId, { ...priceFor(item) });
   }
+  updateComposition();
+}
+
+function updateComposition() {
   invalidateResults();
-  renderAll();
+  renderComposition();
+  renderOverview();
+  updateBuilderSummary();
 }
 
 function onRequirementChange(event) {
@@ -856,7 +911,7 @@ function onCostChange(event) {
   if (input.validity.badInput) return;
   const parsed = input.value.trim() === "" ? "" : Math.max(0, Number(input.value) || 0);
   if (event.type === "change") input.value = String(parsed);
-  const current = { ...(state.candidates.get(itemId) ?? priceFor(state.items.find((item) => item.id === itemId) ?? {})) };
+  const current = { ...(state.candidates.get(itemId) ?? priceFor(itemsById.get(itemId) ?? {})) };
   current[field] = parsed;
   state.candidates.set(itemId, current);
   state.prices.set(itemId, current);
@@ -917,39 +972,58 @@ function bindEvents() {
     invalidateResults();
     renderAll();
   });
-  $("#catalog-list").addEventListener("click", (event) => {
+  $$('[data-builder-view]').forEach((button) => {
+    button.addEventListener("click", () => showBuilderView(button.dataset.builderView));
+  });
+  const toggleItem = (event) => {
     const button = event.target.closest("[data-toggle-item]");
-    if (button) selectItem(button.dataset.toggleItem);
-  });
-  $("#catalog-list").addEventListener("input", onCostChange);
-  $("#catalog-list").addEventListener("change", onCostChange);
-  $("#catalog-show-more").addEventListener("click", () => {
-    const pageSize = catalogPageSize();
-    if (Number.isFinite(pageSize)) state.catalogLimit += pageSize;
+    if (!button) return;
+    const selector = "[data-toggle-item]";
+    const index = $$(selector, event.currentTarget).indexOf(button);
+    selectItem(button.dataset.toggleItem);
+    const remaining = $$(selector, event.currentTarget);
+    (remaining[Math.min(index, remaining.length - 1)] ?? $("#selected-items-tab")).focus({ preventScroll: true });
+  };
+  $("#catalog-list").addEventListener("click", toggleItem);
+  $("#selected-list").addEventListener("click", toggleItem);
+  $("#selected-list").addEventListener("input", onCostChange);
+  $("#selected-list").addEventListener("change", onCostChange);
+  $$('[data-catalog-step]').forEach((button) => button.addEventListener("click", () => {
+    state.catalogPage += Number(button.dataset.catalogStep);
     renderCatalog();
-  });
+    $("#catalog-list").scrollTop = 0;
+  }));
+  $$('[data-selected-step]').forEach((button) => button.addEventListener("click", () => {
+    state.selectedPage += Number(button.dataset.selectedStep);
+    renderSelected();
+  }));
   $("#catalog-page-size").addEventListener("change", () => {
-    state.catalogLimit = catalogPageSize();
+    state.catalogPage = 0;
     renderCatalog();
   });
   let searchTimer;
   $("#catalog-search").addEventListener("input", (event) => {
     state.search = event.target.value;
-    state.catalogLimit = catalogPageSize();
+    state.catalogPage = 0;
+    $("#catalog-select-page").disabled = true;
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(renderCatalog, 250);
+    searchTimer = setTimeout(renderCatalog, 150);
   });
   $$(".catalog-tab").forEach((tab) => tab.addEventListener("click", () => {
     state.activeKind = tab.dataset.kind;
-    state.catalogLimit = catalogPageSize();
+    state.catalogPage = 0;
     $$(".catalog-tab").forEach((other) => other.classList.toggle("is-active", other === tab));
     renderCatalog();
   }));
+  $("#catalog-select-page").addEventListener("click", () => {
+    for (const item of state.catalogPageItems) {
+      if (!state.candidates.has(item.id)) state.candidates.set(item.id, { ...priceFor(item) });
+    }
+    updateComposition();
+  });
   $("#clear-selection").addEventListener("click", () => {
     state.candidates.clear();
-    invalidateResults();
-    renderAll();
-    showToast("Выбор очищен.", "success");
+    updateComposition();
   });
   $("#run-evaluation").addEventListener("click", runEvaluation);
   $("#run-optimization").addEventListener("click", runOptimization);
@@ -987,6 +1061,13 @@ async function loadPageData(draft = null) {
   const result = await workspaceService.loadCatalogs();
   state.requirements = result.requirements;
   state.items = result.items;
+  itemsById = new Map(state.items.map((item) => [item.id, item]));
+  requirementsById = new Map(state.requirements.map((requirement) => [requirement.id, requirement]));
+  catalogFilter = null;
+  const tools = state.items.filter((item) => item.kind === "tool").length;
+  $('[data-kind="all"]').textContent = `Все (${number.format(state.items.length)})`;
+  $('[data-kind="tool"]').textContent = `Средства (${number.format(tools)})`;
+  $('[data-kind="org"]').textContent = `Оргмеры (${number.format(state.items.length - tools)})`;
   state.profiles = [...result.profiles].sort((a, b) => String(a.id).localeCompare(String(b.id), "ru", { numeric: true }));
   state.optimizers = result.optimizers;
   state.usingExamples = result.usingExamples;
@@ -1005,9 +1086,8 @@ async function loadPageData(draft = null) {
     state.selectedRequirements = new Set(mandatoryIds());
   }
   mandatoryRequirementsAreIncluded();
-  const validItemIds = new Set(state.items.map((entry) => entry.id));
   for (const itemId of state.candidates.keys()) {
-    if (!validItemIds.has(itemId)) state.candidates.delete(itemId);
+    if (!itemsById.has(itemId)) state.candidates.delete(itemId);
   }
   state.initializedOnce = true;
   renderOptimizerOptions();
@@ -1033,6 +1113,8 @@ async function initialize() {
   $("#workspace-account").textContent = account.login;
   bindEvents();
   updateModeVisibility();
+  $("#page-builder").inert = false;
+  $("#workspace-loading").hidden = true;
 }
 
 initialize().catch((error) => {
@@ -1040,6 +1122,7 @@ initialize().catch((error) => {
     window.location.replace("/");
     return;
   }
+  $("#workspace-loading").hidden = true;
   $("#data-notice-text").textContent = error?.message || "Не удалось загрузить справочники.";
   $("#data-notice").hidden = false;
 });
