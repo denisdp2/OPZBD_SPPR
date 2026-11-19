@@ -195,6 +195,20 @@ th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transfor
 
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
 
+.pagination {
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.pagination > .btn,
+.pagination > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.pagination > span { line-height: 1.5; }
+
 .registry-actions {
   align-items: center;
 }

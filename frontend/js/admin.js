@@ -133,7 +133,7 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns = [], fields = 
           <input id="${tableId}-query" name="q" type="search" value="${esc(query)}">
           <button class="btn secondary" type="submit">Найти</button></form>` + table(
         headers, items.slice(offset, offset + 50).map((item) => toRow(item)),
-      ) + `<div class="toolbar"><button class="btn secondary" data-prev ${offset === 0 ? "disabled" : ""}>Назад</button>
+      ) + `<div class="toolbar pagination"><button class="btn secondary" data-prev ${offset === 0 ? "disabled" : ""}>Назад</button>
         <span>${items.length ? `${offset + 1}–${Math.min(offset + 50, items.length)} из ${items.length}` : "Нет записей"}</span>
         <button class="btn secondary" data-next ${offset + 50 >= items.length ? "disabled" : ""}>Далее</button></div>`;
     } catch (err) {

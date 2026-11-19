@@ -208,8 +208,8 @@ button { -webkit-tap-highlight-color: transparent; }
   font-weight: 700;
   transition: background .16s ease, box-shadow .16s ease, transform .16s ease;
 }
-.submit-button span { margin-left: auto; }
-.submit-button svg { width: 17px; height: 17px; margin-left: auto; }
+.submit-button span { margin: 0; text-align: center; }
+.submit-button svg { width: 17px; height: 17px; flex-shrink: 0; }
 .submit-button:hover {
   color: #fff !important;
   background: var(--auth-navy-deep) !important;

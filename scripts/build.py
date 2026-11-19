@@ -1,4 +1,6 @@
-"""Сборка портативной версии для флешки.
+"""Сборка портативной версии для Windows и Linux.
+
+Программа работает без установки, в том числе с флешки.
 
     pip install -e .[build]
     python scripts/build.py
@@ -9,7 +11,7 @@
     ├── szi/                 программа (PyInstaller, режим onedir)
     ├── data/                база и сценарии (сохраняются между запусками)
     ├── start-windows.bat  или  start-linux.sh
-    └── ПРОЧТИ.txt
+    └── README.txt
 
 Кросс-компиляции нет: версию для Windows собирают на Windows, для Linux —
 на Linux (лучше на самой старой Ubuntu, где программа должна работать:
@@ -67,7 +69,7 @@ def assemble(app_dir: Path) -> Path:
     shutil.copytree(app_dir, out / "szi")
     (out / "data").mkdir()
     shutil.copy(ROOT / "data" / "seed_bundle.json", out / "data" / "seed_bundle.json")
-    shutil.copy(LAUNCHERS / "ПРОЧТИ.txt", out / "ПРОЧТИ.txt")
+    shutil.copy(LAUNCHERS / "README.txt", out / "README.txt")
 
     if tag == "windows":
         shutil.copy(LAUNCHERS / "start-windows.bat", out / "start-windows.bat")
