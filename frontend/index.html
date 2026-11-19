@@ -7,23 +7,21 @@
   <meta name="description" content="Вход в учётную запись">
   <title>Вход — СППР</title>
   <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-6">
-  <link rel="stylesheet" href="/static/assets/css/auth.css?v=admin-layout-1">
-  <script type="module" src="/static/assets/js/pages/auth-page.js?v=admin-layout-1"></script>
+  <link rel="stylesheet" href="/static/assets/css/auth.css?v=centered-1">
+  <script type="module" src="/static/assets/js/pages/auth-page.js?v=centered-1"></script>
 </head>
 <body>
-  <div class="layout auth-layout">
-    <aside class="side">
+  <main class="auth-shell">
+    <div class="card auth-card-panel">
       <div class="brand-name">СППР</div>
-      <nav aria-label="Учётная запись">
-        <button class="auth-tab active" type="button" aria-current="page" data-view="login">Вход</button>
-        <button class="auth-tab" type="button" data-view="register">Регистрация</button>
+      <nav class="auth-tabs" aria-label="Учётная запись">
+        <button class="btn auth-tab" type="button" aria-current="page" data-view="login">Вход</button>
+        <button class="btn secondary auth-tab" type="button" data-view="register">Регистрация</button>
       </nav>
-    </aside>
 
-    <main class="main auth-main">
       <section id="login-view" aria-labelledby="login-title">
-        <div class="top"><h1 id="login-title">Вход</h1></div>
-        <form class="card auth-form" id="login-form" novalidate>
+        <h1 id="login-title">Вход</h1>
+        <form id="login-form" novalidate>
           <label for="login-name">Логин</label>
           <input id="login-name" name="login" type="text" autocomplete="username" required maxlength="64">
           <label for="login-password">Пароль</label>
@@ -40,8 +38,8 @@
       </section>
 
       <section id="register-view" aria-labelledby="register-title" hidden>
-        <div class="top"><h1 id="register-title">Регистрация</h1></div>
-        <form class="card auth-form" id="register-form" novalidate>
+        <h1 id="register-title">Регистрация</h1>
+        <form id="register-form" novalidate>
           <label for="register-name">Логин</label>
           <input id="register-name" name="login" type="text" autocomplete="username" required minlength="3" maxlength="64" aria-describedby="register-login-hint">
           <p class="auth-hint" id="register-login-hint">Не менее 3 символов.</p>
@@ -57,13 +55,11 @@
       </section>
 
       <section id="forgot-view" aria-labelledby="forgot-title" hidden>
-        <div class="top"><h1 id="forgot-title">Восстановление доступа</h1></div>
-        <div class="card auth-form">
-          <p>Сообщите администратору свой логин, чтобы он мог задать новый пароль.</p>
-          <button class="btn secondary" type="button" data-view="login">Назад ко входу</button>
-        </div>
+        <h1 id="forgot-title">Восстановление доступа</h1>
+        <p>Сообщите администратору свой логин, чтобы он мог задать новый пароль.</p>
+        <button class="btn secondary" type="button" data-view="login">Назад ко входу</button>
       </section>
-    </main>
-  </div>
+    </div>
+  </main>
 </body>
 </html>

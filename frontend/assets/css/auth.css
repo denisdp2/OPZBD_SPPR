@@ -1,15 +1,19 @@
-.auth-form { max-width: 520px; }
-.auth-form > :first-child { margin-top: 0; }
+.auth-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+.auth-card-panel { width: min(100%, 460px); padding: clamp(20px, 5vw, 32px); }
+.auth-card-panel h1 { margin-bottom: 16px; }
+.auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 18px 0 24px;
+}
 .auth-password { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.auth-actions { margin-top: 16px; }
+.auth-actions { display: grid; margin-top: 16px; }
 .auth-hint { margin: 6px 0 12px; color: var(--muted); font-size: 14px; }
 .form-message { margin-top: 16px; color: var(--muted); }
 .form-message.is-error { color: var(--danger); }
 .form-message.is-success { color: var(--ok); }
-
-@media (max-width: 860px) {
-  .auth-layout { grid-template-rows: auto 1fr; }
-  .auth-layout .side { gap: 12px; }
-  .auth-layout nav { flex-direction: row; flex-wrap: wrap; }
-  .auth-main { padding: 24px 18px; }
-}

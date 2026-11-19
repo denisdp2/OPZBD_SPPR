@@ -18,7 +18,7 @@ function showView(name) {
 
   tabs.forEach((tab) => {
     const active = tab.dataset.view === name;
-    tab.classList.toggle("active", active);
+    tab.classList.toggle("secondary", !active);
     if (active) tab.setAttribute("aria-current", "page");
     else tab.removeAttribute("aria-current");
   });
