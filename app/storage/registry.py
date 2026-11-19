@@ -2,6 +2,7 @@
 
 import sqlite3
 from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.models import Item
@@ -23,6 +24,10 @@ class RegistryStore:
             columns = {row[1] for row in con.execute("PRAGMA table_info(registry)")}
             if "manual_price" not in columns:
                 con.execute("ALTER TABLE registry ADD COLUMN manual_price REAL")
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS registry_metadata "
+                "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            )
 
     def set_manual_price(self, number: int, value: float | None) -> bool:
         with closing(sqlite3.connect(self.path)) as con, con:
@@ -35,7 +40,13 @@ class RegistryStore:
         with closing(sqlite3.connect(self.path)) as con, con:
             con.execute("DELETE FROM registry WHERE reg_number=?", (number,))
 
-    def upsert(self, records: list[RegistryRecord]) -> None:
+    def upsert(
+        self,
+        records: list[RegistryRecord],
+        *,
+        imported: bool = False,
+        source_date: str | None = None,
+    ) -> None:
         with closing(sqlite3.connect(self.path)) as con, con:
             for record in records:
                 old = con.execute(
@@ -53,6 +64,22 @@ class RegistryStore:
                     con.execute(
                         "UPDATE registry SET price=NULL WHERE reg_number=?", (record.reg_number,)
                     )
+            if imported and records:
+                con.executemany(
+                    "INSERT OR REPLACE INTO registry_metadata VALUES (?, ?)",
+                    (
+                        ("last_import_at", datetime.now(timezone.utc).isoformat()),
+                        ("source_date", source_date or ""),
+                    ),
+                )
+
+    def import_status(self) -> dict[str, str | None]:
+        with closing(sqlite3.connect(self.path)) as con:
+            values = dict(con.execute("SELECT key, value FROM registry_metadata"))
+        return {
+            "last_import_at": values.get("last_import_at"),
+            "source_date": values.get("source_date") or None,
+        }
 
     def coverage_records(self) -> list[RegistryRecord]:
         with closing(sqlite3.connect(self.path)) as con:

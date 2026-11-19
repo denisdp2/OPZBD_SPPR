@@ -179,6 +179,33 @@ def test_blocked_official_download_has_local_xlsx_alternative(client, monkeypatc
     assert Path(saved.json()["path"]).read_bytes().startswith(b"PK")
 
 
+def test_registry_import_date_survives_restart_and_ignores_failed_import(client):
+    from app.storage.registry import RegistryStore
+
+    status = "/api/admin/registry/import-status"
+    upload = "/api/admin/import/ru-software"
+    assert client.get(status).status_code == 401
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    assert client.get(status).json() == {"last_import_at": None, "source_date": None}
+    xml = (
+        b'<xml><registry genDate="2026.11.18 00:21"><item>'
+        b'<registrationNumber>1</registrationNumber><name>Tool</name>'
+        b'</item></registry></xml>'
+    )
+    assert client.post(upload, files={"file": ("registry.xml", xml)}).status_code == 200
+    imported = client.get(status).json()
+    assert imported["source_date"] == "2026-11-18"
+    assert imported["last_import_at"].endswith("+00:00")
+    assert client.post(upload, files={"file": ("invalid.xml", b"<broken")}).status_code == 422
+    assert client.get(status).json() == imported
+    store = RegistryStore(client.app.state.registry.store.path)
+    assert store.import_status() == imported
+    records = b'[{"reg_number": 1, "name": "Tool"}]'
+    ok = client.post(upload, files={"file": ("registry.json", records)})
+    assert ok.status_code == 200
+    assert store.import_status()["source_date"] is None
+
+
 def test_discover_official_export_links_without_guessed_urls():
     content = (
         b'<a href="?download=html">Download HTML</a>'

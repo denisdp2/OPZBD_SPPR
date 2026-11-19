@@ -581,6 +581,10 @@ def create_app(
             headers={"Content-Disposition": 'attachment; filename="registry.xlsx"'},
         )
 
+    @admin.get("/registry/import-status")
+    def registry_import_status() -> dict[str, str | None]:
+        return registry.store.import_status()
+
     @admin.post("/registry/export.xlsx")
     def save_local_registry_excel() -> dict:
         cache = paths.data_dir() / "registry-cache" / "registry-local.xlsx"

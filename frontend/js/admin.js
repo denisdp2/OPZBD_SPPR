@@ -56,7 +56,10 @@ function showPage(id) {
   if (id === "gaps") loadGaps();
   if (id === "tools") {
     loadRegistry();
-    if (toolsView === "downloads") pollPrices();
+    if (toolsView === "downloads") {
+      loadRegistryImportDate();
+      pollPrices();
+    }
   }
   if (id === "profile") loadAdminProfile();
 }
@@ -373,7 +376,10 @@ document.querySelectorAll("[data-upload]").forEach((input) => {
         status.textContent = `Загружено: ${report.imported}. Ошибок: ${report.errors.length}.`;
         if (report.errors.length) status.textContent += " " + report.errors.slice(0, 3).join("; ");
       }
-      if (input.dataset.upload === "registry") { registryOffset = 0; await loadRegistry(); }
+      if (input.dataset.upload === "registry") {
+        registryOffset = 0;
+        await Promise.all([loadRegistry(), loadRegistryImportDate()]);
+      }
       if (input.dataset.upload === "org") await loadOrg();
       if (input.dataset.upload === "requirements") await loadRequirements();
     } catch (err) {
@@ -425,7 +431,10 @@ bindCatalogTabs("page-tools", view => {
     registryOffset = 0;
   }
   clearTimeout(priceTimer);
-  if (downloads) pollPrices();
+  if (downloads) {
+    loadRegistryImportDate();
+    pollPrices();
+  }
   document.getElementById("registry-table").replaceChildren();
   loadRegistry();
 });
@@ -437,6 +446,23 @@ bindCatalogTabs("page-org", view => {
 function registryParams() {
   return new URLSearchParams({q: registryQuery, state: registryState,
     sort: registrySort, direction: registryDirection});
+}
+
+async function loadRegistryImportDate() {
+  const target = document.getElementById("registry-import-date");
+  try {
+    const {last_import_at: imported, source_date: source} = await SZI.request("/api/admin/registry/import-status");
+    const format = new Intl.DateTimeFormat("ru-RU");
+    if (source) {
+      target.textContent = `Актуальность реестра на: ${format.format(new Date(`${source}T00:00:00`))}`;
+    } else if (imported) {
+      target.textContent = `Дата выгрузки неизвестна. Последний импорт: ${format.format(new Date(imported))}`;
+    } else {
+      target.textContent = "Актуальность реестра: дата неизвестна";
+    }
+  } catch {
+    target.textContent = "Не удалось загрузить дату актуальности реестра";
+  }
 }
 
 function sourceLink(url, label) {
@@ -693,8 +719,9 @@ async function pollPrices() {
     const stopButton = document.getElementById("stop-prices");
     if (collectButton) collectButton.disabled = running;
     if (stopButton) stopButton.disabled = job.status !== "running";
+    const counts = `${job.done.toLocaleString("ru-RU")} из ${job.total.toLocaleString("ru-RU")}`;
     document.getElementById("price-progress").textContent = job.status === "idle" || !showPriceResult ? "" :
-      `${({running: "Обработка", stopping: "Остановка", stopped: "Остановлено", failed: "Сбой", completed: "Завершено"})[job.status]}: ${job.done}/${job.total}, ошибок: ${job.errors}. ${job.message || ""}`;
+      `${({running: "Обработка", stopping: "Остановка", stopped: "Остановлено", failed: "Сбой", completed: "Завершено"})[job.status]}: ${counts} уникальных ссылок на цены. Ошибок: ${job.errors}. ${job.message || ""}`;
     if (running) priceTimer = setTimeout(pollPrices, 2000);
     else if (job.status !== "idle" && showPriceResult) await loadRegistry();
   } catch (err) {

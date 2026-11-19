@@ -279,6 +279,7 @@ button:disabled { cursor: wait; opacity: .55; }
   display: grid;
   gap: 16px;
 }
+#registry-import-date { margin: 0; }
 
 .registry-control-card [role="status"]:empty { display: none; }
 .registry-control-card [role="status"] { overflow-wrap: anywhere; }
