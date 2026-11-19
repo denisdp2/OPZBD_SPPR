@@ -78,6 +78,9 @@ export const workspaceService = Object.freeze({
   pareto(payload, signal) {
     return workspaceApi.pareto(payload, signal);
   },
+  pareto3d(payload, signal) {
+    return workspaceApi.pareto3d(payload, signal);
+  },
 
   cancelOptimization() {
     return workspaceApi.cancelOptimization();

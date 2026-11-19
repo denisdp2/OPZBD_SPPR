@@ -644,6 +644,7 @@ function invalidateResults() {
   state.resultSource = "none";
   state.lastOptimization = null;
   state.lastPareto = [];
+  window.dispatchEvent(new CustomEvent("workspace:pareto-3d-updated", { detail: { solutions: [] } }));
   $("#solution-empty").hidden = false;
   $("#solution-result").hidden = true;
   $("#solution-chip").classList.remove("is-success", "is-warning");
@@ -781,6 +782,24 @@ async function runOptimization() {
       pareto = localPareto(payload.scenario);
     }
     state.lastPareto = Array.isArray(pareto) ? pareto : [];
+    let pareto3d = [];
+    let pareto3dError = "";
+    if (solutionSource === "server" && !state.usingExamples) {
+      try {
+        pareto3d = await workspaceService.pareto3d(payload, controller.signal);
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          stopped = true;
+          return;
+        }
+        pareto3dError = error?.message || "Не удалось получить трёхкритериальный фронт.";
+      }
+    } else {
+      pareto3dError = "3D-фронт строится по данным сервера. В демонстрационном режиме доступен только обычный 2D-график.";
+    }
+    window.dispatchEvent(new CustomEvent("workspace:pareto-3d-updated", {
+      detail: { solutions: Array.isArray(pareto3d) ? pareto3d : [], selectedSolution: solution, error: pareto3dError },
+    }));
   } finally {
     if (stopButton) stopButton.hidden = true;
     state.optimizationAbort = null;
