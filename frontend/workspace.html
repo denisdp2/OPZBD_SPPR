@@ -7,7 +7,7 @@
   <meta name="description" content="Подбор средств и организационных мер защиты информации">
   <title>Сценарий и состав — СППР</title>
   <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-6">
-  <link rel="stylesheet" href="/static/assets/css/workspace.css?v=composition-2">
+  <link rel="stylesheet" href="/static/assets/css/workspace.css?v=composition-3">
   <script type="module" src="/static/assets/js/pages/workspace-page.js?v=composition-2"></script>
 </head>
 <body>
@@ -46,7 +46,14 @@
         <div class="overview-grid">
           <article class="card coverage-panel">
             <div class="panel-heading"><div><h2>Последняя оценка</h2></div><button type="button" class="btn secondary compact-button" data-page="evaluation">Оценка</button></div>
-            <div class="coverage-summary"><div class="coverage-ring" id="coverage-ring" style="--coverage:0"><div><strong id="coverage-percent">0%</strong><span>покрыто</span></div></div><div class="coverage-legend"><div><span class="legend-dot dot-green"></span><span>Закрыто требований</span><strong id="covered-count">—</strong></div><div><span>Не закрыто</span><strong id="uncovered-count">—</strong></div><div><span class="legend-dot dot-blue"></span><span>Обязательных</span><strong id="coverage-mandatory-count">0</strong></div></div></div>
+            <div class="coverage-summary">
+              <div class="coverage-ring" id="coverage-ring" style="--coverage:0"><div><strong id="coverage-percent">0%</strong><span>покрыто</span></div></div>
+              <div class="coverage-legend">
+                <div><span class="legend-dot dot-green" aria-hidden="true"></span><span>Закрыто требований</span><strong id="covered-count">—</strong></div>
+                <div><span class="legend-dot dot-amber" aria-hidden="true"></span><span>Не закрыто</span><strong id="uncovered-count">—</strong></div>
+                <div><span class="legend-dot dot-blue" aria-hidden="true"></span><span>Обязательных</span><strong id="coverage-mandatory-count">0</strong></div>
+              </div>
+            </div>
             <div class="panel-divider"></div>
             <div class="mandatory-indicator" id="mandatory-indicator"><div><strong id="mandatory-status-title">Оцените текущий набор</strong><p id="mandatory-status-text">После расчёта здесь появится результат проверки обязательных требований.</p></div></div>
           </article>

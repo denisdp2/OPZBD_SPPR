@@ -108,8 +108,9 @@
 .coverage-legend { flex: 1; }
 .coverage-legend div { display: flex; align-items: center; gap: 8px; padding-block: 3px; }
 .coverage-legend strong { margin-left: auto; }
-.legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--navy); }
+.legend-dot { display: inline-block; width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--navy); }
 .dot-green { background: var(--ok); }
+.dot-amber { background: var(--accent); }
 .mini-item, .solution-item { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .mini-item-copy, .solution-item > span { min-width: 0; overflow-wrap: anywhere; }
 .mini-item-copy small { display: block; margin-top: 4px; color: var(--muted); }
