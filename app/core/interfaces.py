@@ -68,10 +68,10 @@ class Repository(ABC):
     def delete_item(self, item_id: str) -> None: ...
 
     @abstractmethod
-    def replace_tool_coverage(
+    def replace_item_coverage(
         self, item_id: str, expected: list[str], covers: list[str]
     ) -> Item | None:
-        """Сохранить связи и вернуть средство или None при конфликте изменений."""
+        """Сохранить связи и вернуть позицию или None при конфликте изменений."""
 
     # ---- профили обязательности ----
     @abstractmethod

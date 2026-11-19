@@ -78,7 +78,7 @@ class ManualRegistryPrice(BaseModel):
     value: float | None = Field(ge=0, allow_inf_nan=False)
 
 
-class ToolCoverageUpdate(BaseModel):
+class ItemCoverageUpdate(BaseModel):
     expected: list[str]
     covers: list[str]
 
@@ -308,15 +308,15 @@ def create_app(
         return {"status": "ok"}
 
     @admin.patch("/items/{item_id}/coverage")
-    def update_tool_coverage(item_id: str, body: ToolCoverageUpdate) -> Item:
+    def update_item_coverage(item_id: str, body: ItemCoverageUpdate) -> Item:
         covers = list(dict.fromkeys(body.covers))
         try:
-            item = repo.replace_tool_coverage(item_id, body.expected, covers)
+            item = repo.replace_item_coverage(item_id, body.expected, covers)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if item is None:
             raise HTTPException(
-                status_code=409, detail="Связи уже изменились. Откройте средство заново."
+                status_code=409, detail="Связи уже изменились. Откройте запись заново."
             )
         return item
 

@@ -134,9 +134,9 @@ function bindCrud({ tableId, formId, listPath, itemPath, columns = [], fields = 
       tableRoot.innerHTML = `<form data-catalog-search class="card toolbar">
           <label for="${tableId}-query">Поиск по коду или названию</label>
           <input id="${tableId}-query" name="q" type="search" value="${esc(query)}">
-          <button class="btn secondary" type="submit">Найти</button></form>` + table(
+          <button class="btn secondary" type="submit">Найти</button></form><div class="catalog-table-scroll">` + table(
         headers, items.slice(offset, offset + 50).map((item) => toRow(item)),
-      ) + `<div class="toolbar pagination"><button class="btn secondary" data-prev ${offset === 0 ? "disabled" : ""}>Назад</button>
+      ) + `</div><div class="toolbar pagination"><button class="btn secondary" data-prev ${offset === 0 ? "disabled" : ""}>Назад</button>
         <span>${items.length ? `${offset + 1}–${Math.min(offset + 50, items.length)} из ${items.length}` : "Нет записей"}</span>
         <button class="btn secondary" data-next ${offset + 50 >= items.length ? "disabled" : ""}>Далее</button></div>`;
     } catch (err) {
@@ -254,9 +254,7 @@ function itemFormHtml(v) {
         <div><label>Код</label><input name="id" value="${esc(v.id)}" ${v.id ? "readonly" : ""} required></div>
         <div class="span-2"><label>Название</label><input name="name" value="${esc(v.name)}" required></div>
         <div class="span-2"><label>Описание</label><textarea name="description">${esc(v.description)}</textarea></div>
-        ${kind === "org" ? `<div class="span-2"><label>Закрывает требования (через запятую)</label>
-          <input name="covers" value="${esc((v.covers || []).join(", "))}"></div>` :
-          `<input type="hidden" name="covers" value="${esc((v.covers || []).join(", "))}">`}
+        <input type="hidden" name="covers" value="${esc((v.covers || []).join(", "))}">
         <div><label>Производитель</label><input name="vendor" value="${esc(v.vendor)}"></div>
         <div><label>Срок внедрения, дни</label><input name="implement_days" type="number" min="0" step="0.1" value="${esc(v.implement_days)}"></div>
         <div><label><input type="checkbox" name="fstec_certified" ${v.fstec_certified ? "checked" : ""}> Сертификат ФСТЭК</label></div>
@@ -292,10 +290,14 @@ function itemRow(item) {
   return `<tr>
       <td>${esc(item.id)}</td>
       <td>${esc(item.name)}</td><td>${esc((item.covers || []).join(", "))}</td>
-      <td class="row-actions">
-        <button class="btn secondary" data-edit data-id="${esc(item.id)}">Изменить</button>
-        <button class="btn danger" data-delete data-id="${esc(item.id)}">Удалить</button>
-      </td></tr>`;
+      <td class="row-actions">${itemActions(item, orgView === "coverage")}</td></tr>`;
+}
+
+function itemActions(item, coverageView) {
+  if (coverageView) return `<button class="btn secondary" type="button" data-item-coverage="${esc(item.id)}"
+    data-item-name="${esc(item.name)}">Изменить требования</button>`;
+  return `<button class="btn secondary" data-edit data-id="${esc(item.id)}">Изменить</button>
+    <button class="btn danger" data-delete data-id="${esc(item.id)}">Удалить</button>`;
 }
 
 const toolsUi = bindCrud({
@@ -396,28 +398,41 @@ let registrySort = "name";
 let registryDirection = "asc";
 let registryRequest = 0;
 let toolsView = "downloads";
+let orgView = "downloads";
 
-const toolsViewButtons = [...document.querySelectorAll("[data-tools-view]")];
-const downloadsOnly = [...document.querySelectorAll("[data-downloads-only]")];
-toolsViewButtons.forEach(button => button.addEventListener("click", () => {
-  if (button.dataset.toolsView === toolsView) return;
-  toolsView = button.dataset.toolsView;
+function bindCatalogTabs(pageId, onChange) {
+  const page = document.getElementById(pageId);
+  const buttons = [...page.querySelectorAll("[data-catalog-view]")];
+  const panels = [...page.querySelectorAll("[data-view-panel]")];
+  buttons.forEach(button => button.addEventListener("click", () => {
+    if (button.getAttribute("aria-pressed") === "true") return;
+    const view = button.dataset.catalogView;
+    buttons.forEach(tab => {
+      tab.classList.toggle("secondary", tab !== button);
+      tab.setAttribute("aria-pressed", String(tab === button));
+    });
+    panels.forEach(panel => panel.hidden = panel.dataset.viewPanel !== view);
+    onChange(view);
+  }));
+}
+
+bindCatalogTabs("page-tools", view => {
+  toolsView = view;
   const downloads = toolsView === "downloads";
   if (!downloads && registrySort === "value") {
     registrySort = "name";
     registryDirection = "asc";
     registryOffset = 0;
   }
-  toolsViewButtons.forEach(tab => {
-    tab.classList.toggle("secondary", tab !== button);
-    tab.setAttribute("aria-pressed", String(tab === button));
-  });
-  downloadsOnly.forEach(block => block.hidden = !downloads);
   clearTimeout(priceTimer);
   if (downloads) pollPrices();
   document.getElementById("registry-table").replaceChildren();
   loadRegistry();
-}));
+});
+bindCatalogTabs("page-org", view => {
+  orgView = view;
+  orgUi.refresh(false);
+});
 
 function registryParams() {
   return new URLSearchParams({q: registryQuery, state: registryState,
@@ -458,11 +473,7 @@ async function loadRegistry() {
         ${downloads ? `<td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
           ${r ? `<button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
             data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button>` : ""}</td>` : ""}
-        <td class="row-actions">${downloads ? `
-          <button class="btn secondary" data-edit data-id="${esc(item.id)}">Изменить</button>
-          <button class="btn danger" data-delete data-id="${esc(item.id)}">Удалить</button>` : `
-          <button class="btn secondary" data-tool-coverage="${esc(item.id)}">Изменить требования</button>`}
-        </td></tr>`));
+        <td class="row-actions">${itemActions(item, !downloads)}</td></tr>`));
     document.getElementById("registry-count").textContent = data.total ? `${registryOffset + 1}–${Math.min(registryOffset + 50, data.total)} из ${data.total}` : "Реестр пока пуст";
     document.getElementById("registry-prev").disabled = registryOffset === 0;
     document.getElementById("registry-next").disabled = registryOffset + 50 >= data.total;
@@ -473,97 +484,98 @@ async function loadRegistry() {
   }
 }
 
-const toolCoverageDialog = document.getElementById("tool-coverage-dialog");
-const toolCoverageForm = document.getElementById("tool-coverage-form");
-const toolCoverageQuery = document.getElementById("tool-coverage-query");
-const toolCoverageCount = document.getElementById("tool-coverage-count");
-const toolCoverageOptions = document.getElementById("tool-coverage-options");
-const toolCoverageError = document.getElementById("tool-coverage-error");
-const toolCoverageSave = toolCoverageForm.querySelector('button[type="submit"]');
-let toolCoverageItem;
-let toolCoverageRequirements;
+const itemCoverageDialog = document.getElementById("item-coverage-dialog");
+const itemCoverageForm = document.getElementById("item-coverage-form");
+const itemCoverageQuery = document.getElementById("item-coverage-query");
+const itemCoverageCount = document.getElementById("item-coverage-count");
+const itemCoverageOptions = document.getElementById("item-coverage-options");
+const itemCoverageError = document.getElementById("item-coverage-error");
+const itemCoverageSave = itemCoverageForm.querySelector('button[type="submit"]');
+let itemCoverageItem;
+let itemCoverageRequirements;
 let selectedRequirements;
-let toolCoverageBusy = false;
+let itemCoverageBusy = false;
 
-function renderToolCoverage() {
-  const query = toolCoverageQuery.value.trim().toLocaleLowerCase("ru");
-  const matches = toolCoverageRequirements.filter(({ id, title }) =>
+function renderItemCoverage() {
+  const query = itemCoverageQuery.value.trim().toLocaleLowerCase("ru");
+  const matches = itemCoverageRequirements.filter(({ id, title }) =>
     `${id} ${title}`.toLocaleLowerCase("ru").includes(query));
-  toolCoverageCount.textContent = `Выбрано: ${selectedRequirements.size}`;
-  toolCoverageOptions.innerHTML = matches.length ? matches.map(({ id, title }) => `
-    <label class="tool-coverage-option">
+  itemCoverageCount.textContent = `Выбрано: ${selectedRequirements.size}`;
+  itemCoverageOptions.innerHTML = matches.length ? matches.map(({ id, title }) => `
+    <label class="item-coverage-option">
       <input type="checkbox" value="${esc(id)}" ${selectedRequirements.has(id) ? "checked" : ""}>
       <span><strong>${esc(id)}</strong> ${esc(title)}</span>
     </label>`).join("") : "Требования не найдены.";
 }
 
-document.getElementById("registry-table").addEventListener("click", async event => {
-  const button = event.target.closest("[data-tool-coverage]");
-  if (!button || toolCoverageBusy) return;
-  toolCoverageBusy = true;
-  toolCoverageItem = null;
-  toolCoverageQuery.disabled = toolCoverageSave.disabled = true;
-  toolCoverageQuery.value = "";
-  toolCoverageCount.textContent = "";
-  toolCoverageError.textContent = "";
-  document.getElementById("tool-coverage-name").textContent = button.closest("tr").cells[0].textContent;
-  toolCoverageOptions.textContent = "Загрузка требований…";
-  toolCoverageDialog.showModal();
+document.querySelector("main").addEventListener("click", async event => {
+  const button = event.target.closest("[data-item-coverage]");
+  if (!button || itemCoverageBusy) return;
+  itemCoverageBusy = true;
+  itemCoverageItem = null;
+  itemCoverageQuery.disabled = itemCoverageSave.disabled = true;
+  itemCoverageQuery.value = "";
+  itemCoverageCount.textContent = "";
+  itemCoverageError.textContent = "";
+  document.getElementById("item-coverage-name").textContent = button.dataset.itemName;
+  itemCoverageOptions.textContent = "Загрузка требований…";
+  itemCoverageDialog.showModal();
   try {
     const [item, requirements] = await Promise.all([
-      SZI.request(`/api/admin/items/${encodeURIComponent(button.dataset.toolCoverage)}`),
+      SZI.request(`/api/admin/items/${encodeURIComponent(button.dataset.itemCoverage)}`),
       SZI.request("/api/requirements"),
     ]);
-    if (!toolCoverageDialog.open) return;
-    toolCoverageItem = item;
+    if (!itemCoverageDialog.open) return;
+    itemCoverageItem = item;
     selectedRequirements = new Set(item.covers);
     const known = new Set(requirements.map(req => req.id));
-    toolCoverageRequirements = [...requirements, ...[...selectedRequirements]
+    itemCoverageRequirements = [...requirements, ...[...selectedRequirements]
       .filter(id => !known.has(id)).map(id => ({ id, title: "Нет в справочнике" }))]
       .sort((a, b) => Number(selectedRequirements.has(b.id)) - Number(selectedRequirements.has(a.id)));
-    renderToolCoverage();
-    toolCoverageQuery.disabled = toolCoverageSave.disabled = false;
-    toolCoverageQuery.focus();
+    renderItemCoverage();
+    itemCoverageQuery.disabled = itemCoverageSave.disabled = false;
+    itemCoverageQuery.focus();
   } catch (err) {
-    toolCoverageOptions.textContent = "";
-    toolCoverageError.textContent = err.message;
+    itemCoverageOptions.textContent = "";
+    itemCoverageError.textContent = err.message;
   } finally {
-    toolCoverageBusy = false;
+    itemCoverageBusy = false;
   }
 });
-toolCoverageQuery.addEventListener("input", renderToolCoverage);
-toolCoverageOptions.addEventListener("change", event => {
+itemCoverageQuery.addEventListener("input", renderItemCoverage);
+itemCoverageOptions.addEventListener("change", event => {
   const checkbox = event.target;
   if (checkbox.checked) selectedRequirements.add(checkbox.value);
   else selectedRequirements.delete(checkbox.value);
-  toolCoverageCount.textContent = `Выбрано: ${selectedRequirements.size}`;
+  itemCoverageCount.textContent = `Выбрано: ${selectedRequirements.size}`;
 });
-toolCoverageForm.addEventListener("submit", async event => {
+itemCoverageForm.addEventListener("submit", async event => {
   if (event.submitter?.formMethod === "dialog") return;
   event.preventDefault();
-  if (!toolCoverageItem || toolCoverageBusy) return;
-  toolCoverageBusy = true;
-  const cancel = toolCoverageForm.querySelector('[formmethod="dialog"]');
-  toolCoverageSave.disabled = cancel.disabled = toolCoverageQuery.disabled = true;
-  toolCoverageOptions.inert = true;
-  toolCoverageError.textContent = "";
+  if (!itemCoverageItem || itemCoverageBusy) return;
+  itemCoverageBusy = true;
+  const cancel = itemCoverageForm.querySelector('[formmethod="dialog"]');
+  itemCoverageSave.disabled = cancel.disabled = itemCoverageQuery.disabled = true;
+  itemCoverageOptions.inert = true;
+  itemCoverageError.textContent = "";
   try {
-    await SZI.request(`/api/admin/items/${encodeURIComponent(toolCoverageItem.id)}/coverage`, {
+    await SZI.request(`/api/admin/items/${encodeURIComponent(itemCoverageItem.id)}/coverage`, {
       method: "PATCH",
-      body: JSON.stringify({ expected: toolCoverageItem.covers, covers: [...selectedRequirements] }),
+      body: JSON.stringify({ expected: itemCoverageItem.covers, covers: [...selectedRequirements] }),
     });
-    toolCoverageDialog.close();
-    await loadRegistry();
+    itemCoverageDialog.close();
+    if (itemCoverageItem.kind === "org") await loadOrg();
+    else await loadRegistry();
   } catch (err) {
-    toolCoverageError.textContent = err.message;
+    itemCoverageError.textContent = err.message;
   } finally {
-    toolCoverageBusy = false;
-    toolCoverageSave.disabled = cancel.disabled = toolCoverageQuery.disabled = false;
-    toolCoverageOptions.inert = false;
+    itemCoverageBusy = false;
+    itemCoverageSave.disabled = cancel.disabled = itemCoverageQuery.disabled = false;
+    itemCoverageOptions.inert = false;
   }
 });
-toolCoverageDialog.addEventListener("cancel", event => {
-  if (toolCoverageOptions.inert) event.preventDefault();
+itemCoverageDialog.addEventListener("cancel", event => {
+  if (itemCoverageOptions.inert) event.preventDefault();
 });
 
 const priceDialog = document.getElementById("registry-price-dialog");

@@ -71,7 +71,7 @@ class SQLiteRepository(Repository):
     def delete_item(self, item_id):
         self._delete("items", item_id)
 
-    def replace_tool_coverage(
+    def replace_item_coverage(
         self, item_id: str, expected: list[str], covers: list[str]
     ) -> Item | None:
         with closing(sqlite3.connect(self.path)) as con, con:
@@ -82,8 +82,6 @@ class SQLiteRepository(Repository):
             if row is None:
                 raise NotFoundError(item_id)
             item = Item.model_validate_json(row[0])
-            if item.kind != "tool":
-                raise NotFoundError(item_id)
             if item.covers != expected and item.covers != covers:
                 return None
             known = {

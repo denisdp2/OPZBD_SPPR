@@ -100,7 +100,7 @@ def test_manual_coverage_replaces_links_without_overwriting_item(client):
     assert client.patch(url, json=change).status_code == 403
     client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
     assert client.patch(url, json={**change, "covers": ["unknown"]}).status_code == 422
-    assert client.patch("/api/admin/items/org/coverage", json=change).status_code == 404
+    assert client.patch("/api/admin/items/missing/coverage", json=change).status_code == 404
     assert client.patch(url, json=change).json()["covers"] == ["АВЗ.1"]
     assert client.patch(url, json=change).status_code == 200
     assert client.patch(url, json={**change, "covers": []}).status_code == 409
@@ -108,3 +108,7 @@ def test_manual_coverage_replaces_links_without_overwriting_item(client):
     item = repo.get_item("ru-software-17")
     assert item.covers == []
     assert item.name == "=Demo"
+
+    org_change = {"expected": [], "covers": ["ИАФ.3"]}
+    assert client.patch("/api/admin/items/org/coverage", json=org_change).status_code == 200
+    assert repo.get_item("org").covers == ["ИАФ.3"]
