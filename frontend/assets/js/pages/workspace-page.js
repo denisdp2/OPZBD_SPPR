@@ -40,6 +40,15 @@ function money(value) {
   return currency.format(Number.isFinite(Number(value)) ? Number(value) : 0);
 }
 
+function formatImplementationDays(value) {
+  const days = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return `${days.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} дн.`;
+}
+
+function totalSelectedImplementationDays() {
+  return selectedItems().reduce((sum, entry) => sum + Math.max(0, Number(entry.costs.implement_days) || 0), 0);
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -58,13 +67,14 @@ function mandatoryIds() {
 // Стоимость относится к пользовательскому сценарию, а не к карточке каталога.
 // Пустое значение означает, что пользователь ещё не ввёл цену; 0 допустим как цена.
 function priceFor(item) {
-  return state.prices.get(item.id) ?? { capex: "", opex_month: "" };
+  return state.prices.get(item.id) ?? { capex: "", opex_month: "", implement_days: "" };
 }
 
 function hasMissingCosts() {
   return selectedItems().some(({ costs }) => (
     costs.capex === "" || costs.capex === null || costs.capex === undefined ||
-    costs.opex_month === "" || costs.opex_month === null || costs.opex_month === undefined
+    costs.opex_month === "" || costs.opex_month === null || costs.opex_month === undefined ||
+    costs.implement_days === "" || costs.implement_days === null || costs.implement_days === undefined
   ));
 }
 
@@ -98,7 +108,12 @@ function scenarioFor(itemIds = [...state.candidates.keys()]) {
     requirements: [...new Set([...state.selectedRequirements, ...mandatoryIds()])],
     candidates: itemIds.map((itemId) => {
       const costs = state.candidates.get(itemId) ?? priceFor(state.items.find((item) => item.id === itemId) ?? {});
-      return { item_id: itemId, capex: Number(costs.capex) || 0, opex_month: Number(costs.opex_month) || 0 };
+      return {
+        item_id: itemId,
+        capex: Number(costs.capex) || 0,
+        opex_month: Number(costs.opex_month) || 0,
+        implement_days: Math.round((Number(costs.implement_days) || 0) * 10) / 10,
+      };
     }),
   };
 }
@@ -119,6 +134,7 @@ function localEvaluate(scenario) {
   const uncovered = [...requirements].filter((id) => !covered.includes(id));
   const uncoveredMandatory = mandatory.filter((id) => !covered.includes(id));
   const totalCost = scenario.candidates.reduce((sum, candidate) => sum + candidateCost(candidate, scenario.period_months), 0);
+  const totalImplementationDays = scenario.candidates.reduce((sum, candidate) => sum + (Number(candidate.implement_days) || 0), 0);
   return {
     all_mandatory_covered: uncoveredMandatory.length === 0,
     uncovered_mandatory: uncoveredMandatory,
@@ -127,6 +143,7 @@ function localEvaluate(scenario) {
     covered_optional: covered.filter((id) => !mandatory.includes(id)).length,
     total_optional: [...requirements].filter((id) => !mandatory.includes(id)).length,
     total_cost: totalCost,
+    total_implementation_days: Math.round(totalImplementationDays * 10) / 10,
     covered_by: coveredBy,
   };
 }
@@ -170,6 +187,7 @@ function summarizeSubset(subset, scenario) {
     algorithm: "local-example",
     selected: subset.map((item) => item.item_id),
     cost: evaluation.total_cost,
+    total_implementation_days: evaluation.total_implementation_days,
     covered_count: evaluation.covered.length,
     feasible: evaluation.all_mandatory_covered,
     uncovered_mandatory: evaluation.uncovered_mandatory,
@@ -381,7 +399,7 @@ function renderCatalog() {
         <span class="item-fact ${item.in_ru_software_registry ? "is-positive" : "is-muted"}">${item.in_ru_software_registry ? "В реестре российского ПО" : "Не в реестре российского ПО"}</span>
         ${item.vendor ? `<span class="item-fact">Производитель: ${escapeHtml(item.vendor)}</span>` : ""}
       </div>` : (item.implement_days !== null && item.implement_days !== undefined
-        ? `<div class="item-facts"><span class="item-fact">Срок внедрения: ${escapeHtml(item.implement_days)} дн.</span></div>` : "");
+        ? `<div class="item-facts"><span class="item-fact">Справочный срок из каталога: ${escapeHtml(item.implement_days)} дн.</span></div>` : "");
     return `<article class="catalog-item${selected ? " is-selected" : ""}">
       <div class="catalog-item-main">
         <div class="catalog-item-title-row"><strong class="catalog-item-title">${escapeHtml(item.name)}</strong><span class="kind-tag${item.kind === "org" ? " kind-org" : ""}">${item.kind === "org" ? "Организационная мера" : "Средство защиты"}</span></div>
@@ -394,7 +412,8 @@ function renderCatalog() {
         ${selected ? `<div class="cost-editor">
           <label>Внедрение, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.capex === null || costs.capex === undefined ? "" : escapeHtml(costs.capex)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="capex" aria-label="Стоимость внедрения: ${escapeHtml(item.name)}"><span>₽</span></span></label>
           <label>Эксплуатация в месяц, ₽<span class="cost-input-wrap"><input type="number" min="0" step="1" placeholder="0" value="${costs.opex_month === null || costs.opex_month === undefined ? "" : escapeHtml(costs.opex_month)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="opex_month" aria-label="Стоимость эксплуатации в месяц: ${escapeHtml(item.name)}"><span>₽</span></span></label>
-        </div>` : ""}
+          <label class="implementation-time-field">Время внедрения<span class="cost-input-wrap"><input type="number" min="0" step="0.1" placeholder="0" value="${costs.implement_days === null || costs.implement_days === undefined ? "" : escapeHtml(costs.implement_days)}" data-cost-item="${escapeHtml(item.id)}" data-cost-field="implement_days" aria-label="Время внедрения в днях: ${escapeHtml(item.name)}"><span>дн.</span></span></label>
+        </div><p class="implementation-time-help">Укажите срок для вашей организации. Если внедрение не требует времени, укажите 0.</p>` : ""}
       </div>
       <button type="button" class="catalog-item-select" data-toggle-item="${escapeHtml(item.id)}" aria-label="${selected ? "Убрать из набора" : "Добавить в набор"}: ${escapeHtml(item.name)}" aria-pressed="${selected}">${selected ? "Убрать" : "Добавить"}</button>
     </article>`;
@@ -424,6 +443,7 @@ function renderOverview() {
   $("#stat-mandatory").textContent = String(mandatoryIds().length);
   $("#stat-items").textContent = String(selected.length);
   $("#stat-cost").textContent = money(totalSelectedCost());
+  $("#stat-days").textContent = formatImplementationDays(totalSelectedImplementationDays());
   $("#stat-period").textContent = `За ${number.format(state.periodMonths)} ${state.periodMonths === 1 ? "месяц" : state.periodMonths < 5 ? "месяца" : "месяцев"}`;
   $("#coverage-percent").textContent = evaluation ? `${coveragePercent}%` : "—";
   $("#coverage-ring").style.setProperty("--coverage", String(coveragePercent));
@@ -455,6 +475,7 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
     $("#evaluation-covered").textContent = "—";
     $("#evaluation-mandatory").textContent = "—";
     $("#evaluation-items").textContent = "—";
+    $("#evaluation-implementation-days").textContent = "—";
     $("#evaluation-banner").classList.remove("is-good", "is-bad");
     $("#evaluation-banner-title").textContent = "Набор готов к оценке";
     $("#evaluation-banner-text").textContent = "Запустите расчёт, чтобы проверить обязательные требования.";
@@ -473,6 +494,7 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
   $("#evaluation-mandatory").textContent = `${mandatory.size - (result.uncovered_mandatory ?? []).length} из ${mandatory.size}`;
   $("#evaluation-mandatory-foot").textContent = result.all_mandatory_covered ? "Все обязательные закрыты" : `Не закрыто: ${(result.uncovered_mandatory ?? []).length}`;
   $("#evaluation-items").textContent = String(selected.length);
+  $("#evaluation-implementation-days").textContent = formatImplementationDays(result.total_implementation_days ?? totalSelectedImplementationDays());
   const banner = $("#evaluation-banner");
   banner.classList.toggle("is-good", result.all_mandatory_covered);
   banner.classList.toggle("is-bad", !result.all_mandatory_covered);
@@ -503,6 +525,7 @@ function updateBuilderSummary() {
   const total = totalSelectedCost();
   $("#builder-item-count").textContent = `${chosen.length} позиций выбрано`;
   $("#builder-total-cost").textContent = money(total);
+  $("#builder-total-days").textContent = formatImplementationDays(totalSelectedImplementationDays());
   $("#builder-period-label").textContent = `${number.format(state.periodMonths)} ${state.periodMonths === 1 ? "месяц" : state.periodMonths < 5 ? "месяца" : "месяцев"}`;
   $("#nav-selected-count").textContent = String(chosen.length);
 }
@@ -541,12 +564,13 @@ function renderSolution(solution, source = "example") {
   $("#solution-cost").textContent = money(solution.cost);
   $("#solution-covered").textContent = `${solution.covered_count} из ${state.selectedRequirements.size}`;
   $("#solution-items-count").textContent = String(solution.selected.length);
+  $("#solution-implementation-days").textContent = formatImplementationDays(solution.total_implementation_days ?? 0);
   const elapsed = $("#solution-time");
   if (elapsed) elapsed.textContent = formatElapsed(solution.elapsed_ms);
   const selectedSet = new Set(solution.selected);
   const selectedItemsForResult = selectedItems().filter(({ item }) => selectedSet.has(item.id));
-  $("#solution-items").innerHTML = selectedItemsForResult.length ? selectedItemsForResult.map(({ item, total }) => (
-    `<div class="solution-item"><span>${escapeHtml(item.name)}</span><strong>${money(total)}</strong></div>`
+  $("#solution-items").innerHTML = selectedItemsForResult.length ? selectedItemsForResult.map(({ item, total, costs }) => (
+    `<div class="solution-item"><span>${escapeHtml(item.name)}<small>${formatImplementationDays(costs.implement_days)}</small></span><strong>${money(total)}</strong></div>`
   )).join("") : '<div class="empty-inline">Алгоритм не выбрал позиции из текущего набора.</div>';
   const chip = $("#solution-chip");
   chip.classList.toggle("is-success", Boolean(solution.feasible));
@@ -597,7 +621,7 @@ function renderPareto(solutions, selectedSolution = state.lastOptimization) {
     const px = x(entry.cost);
     const py = y(entry.covered_count);
     const color = active ? "#18825b" : entry.feasible ? "#3169e8" : "#d79a2b";
-    return `<g><title>Стоимость: ${escapeHtml(money(entry.cost))}; закрыто требований: ${entry.covered_count}; ${entry.feasible ? "допустимый вариант" : "не все обязательные требования закрыты"}</title><circle cx="${px}" cy="${py}" r="${active ? 6 : 4.5}" fill="${color}" fill-opacity="${active ? 1 : .82}" stroke="#fff" stroke-width="2"/></g>`;
+    return `<g><title>Стоимость: ${escapeHtml(money(entry.cost))}; срок внедрения: ${escapeHtml(formatImplementationDays(entry.total_implementation_days ?? 0))}; закрыто требований: ${entry.covered_count}; ${entry.feasible ? "допустимый вариант" : "не все обязательные требования закрыты"}</title><circle cx="${px}" cy="${py}" r="${active ? 6 : 4.5}" fill="${color}" fill-opacity="${active ? 1 : .82}" stroke="#fff" stroke-width="2"/></g>`;
   }).join("");
   const maxCoverage = Math.max(...solutions.map((entry) => Number(entry.covered_count) || 0));
   const labels = `<text x="${left + plotWidth / 2}" y="258" text-anchor="middle" fill="#77849a" font-size="10">Стоимость за период, ₽</text><text transform="translate(15 ${top + plotHeight / 2}) rotate(-90)" text-anchor="middle" fill="#77849a" font-size="10">Закрыто требований</text><text x="${left}" y="229" text-anchor="start" fill="#8793a7" font-size="10">0</text><text x="${left + plotWidth}" y="229" text-anchor="end" fill="#8793a7" font-size="10">${escapeHtml(number.format(maxCost))}</text>`;
@@ -651,7 +675,7 @@ async function runEvaluation() {
     return;
   }
   if (state.candidates.size && hasMissingCosts()) {
-    showToast("Заполните стоимость внедрения и эксплуатации для каждой выбранной позиции. Если затраты отсутствуют, укажите 0.", "error");
+    showToast("Заполните стоимость внедрения, эксплуатации и срок внедрения для каждой выбранной позиции. Если параметр не применим, укажите 0.", "error");
     navigateTo("builder");
     return;
   }
@@ -696,7 +720,7 @@ async function runOptimization() {
     return;
   }
   if (hasMissingCosts()) {
-    showToast("Заполните стоимость внедрения и эксплуатации для каждой выбранной позиции. Если затраты отсутствуют, укажите 0.", "error");
+    showToast("Заполните стоимость внедрения, эксплуатации и срок внедрения для каждой выбранной позиции. Если параметр не применим, укажите 0.", "error");
     navigateTo("builder");
     return;
   }
@@ -823,9 +847,11 @@ function restoreDraft(draft) {
   state.periodMonths = draft.period_months;
   $("#period-input").value = draft.period_months;
   state.selectedRequirements = new Set(draft.requirements);
-  state.prices = new Map(Object.entries(draft.prices));
+  state.prices = new Map(Object.entries(draft.prices ?? {}).map(([id, value]) => [
+    id, { capex: "", opex_month: "", implement_days: "", ...(value ?? {}) },
+  ]));
   state.candidates = new Map(draft.candidates.map((id) => [
-    id, { ...(state.prices.get(id) ?? { capex: "", opex_month: "" }) },
+    id, { capex: "", opex_month: "", implement_days: "", ...(state.prices.get(id) ?? {}) },
   ]));
   $("input[name='opt-mode'][value='" + draft.mode + "']").checked = true;
   $("#budget-input").value = draft.budget;
@@ -865,7 +891,8 @@ function onCostChange(event) {
   const itemId = input.dataset.costItem;
   const field = input.dataset.costField;
   if (input.validity.badInput) return;
-  const parsed = input.value.trim() === "" ? "" : Math.max(0, Number(input.value) || 0);
+  const raw = input.value.trim() === "" ? "" : Math.max(0, Number(input.value) || 0);
+  const parsed = raw === "" ? "" : (field === "implement_days" ? Math.round(raw * 10) / 10 : raw);
   if (event.type === "change") input.value = String(parsed);
   const current = { ...(state.candidates.get(itemId) ?? priceFor(state.items.find((item) => item.id === itemId) ?? {})) };
   current[field] = parsed;

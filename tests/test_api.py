@@ -26,7 +26,7 @@ def test_evaluate_uses_catalog_coverage_and_cost(client):
         "requirements": ["Q.1", "Q.2"],
         "profile_id": "p",
         "period_months": 6,
-        "candidates": [{"item_id": "tool-1", "capex": 100, "opex_month": 10}],
+        "candidates": [{"item_id": "tool-1", "capex": 100, "opex_month": 10, "implement_days": 2.5}],
     }
     response = client.post("/api/evaluate", json=scenario)
     assert response.status_code == 200
@@ -38,6 +38,7 @@ def test_evaluate_uses_catalog_coverage_and_cost(client):
         "covered_optional": 0,
         "total_optional": 1,
         "total_cost": 160,
+        "total_implementation_days": 2.5,
         "covered_by": {"Q.1": ["tool-1"]},
     }
     scenario["requirements"] = ["unknown"]

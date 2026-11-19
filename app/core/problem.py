@@ -48,6 +48,7 @@ def build_problem(scenario: Scenario, repo: Repository) -> Problem:
     catalog = repo.list_items()
     items = []
     costs: dict[str, float] = {}
+    implementation_days: dict[str, float] = {}
     seen: set[str] = set()
     for candidate in scenario.candidates:
         if candidate.item_id in seen:
@@ -60,6 +61,7 @@ def build_problem(scenario: Scenario, repo: Repository) -> Problem:
         covers = [req_id for req_id in expand_covers(source, catalog, known) if req_id in known]
         items.append(source.model_copy(update={"covers": covers}))
         costs[source.id] = item_cost(candidate.capex, candidate.opex_month, scenario.period_months)
+        implementation_days[source.id] = round(float(candidate.implement_days), 1)
 
     return Problem(
         requirements=requirements,
@@ -67,6 +69,7 @@ def build_problem(scenario: Scenario, repo: Repository) -> Problem:
         items=items,
         costs=costs,
         period_months=scenario.period_months,
+        implementation_days=implementation_days,
     )
 
 
@@ -78,6 +81,7 @@ def make_solution(problem: Problem, selected: list[str], algorithm: str) -> Solu
     seen: set[str] = set()
     covered: set[str] = set()
     cost = 0.0
+    implementation_days = 0.0
     for item_id in selected:
         if item_id in seen:
             continue
@@ -87,6 +91,7 @@ def make_solution(problem: Problem, selected: list[str], algorithm: str) -> Solu
             continue
         chosen.append(item_id)
         cost += float(problem.costs.get(item_id, 0.0))
+        implementation_days += float(problem.implementation_days.get(item_id, 0.0))
         for req_id in expand_covers(item, problem.items, known):
             if req_id in known:
                 covered.add(req_id)
@@ -100,6 +105,7 @@ def make_solution(problem: Problem, selected: list[str], algorithm: str) -> Solu
             continue
         seen.add(item.id)
         chosen.append(item.id)
+        implementation_days += float(problem.implementation_days.get(item.id, 0.0))
         covered.update(extra)
     return Solution(
         algorithm=algorithm,
@@ -107,4 +113,5 @@ def make_solution(problem: Problem, selected: list[str], algorithm: str) -> Solu
         cost=cost,
         covered_count=len(covered),
         feasible=set(problem.mandatory) <= covered,
+        total_implementation_days=round(implementation_days, 1),
     )

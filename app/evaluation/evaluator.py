@@ -48,7 +48,9 @@ def evaluate(problem: Problem) -> EvaluationResult:
     ]
 
     total_cost = fsum(float(problem.costs.get(item.id, 0.0)) for item in problem.items)
-
+    total_implementation_days = fsum(
+        float(problem.implementation_days.get(item.id, 0.0)) for item in problem.items
+    )
     return EvaluationResult(
         all_mandatory_covered=not uncovered_mandatory,
         uncovered_mandatory=uncovered_mandatory,
@@ -57,5 +59,6 @@ def evaluate(problem: Problem) -> EvaluationResult:
         covered_optional=sum(requirement_id in covered_set for requirement_id in optional_ids),
         total_optional=len(optional_ids),
         total_cost=round(total_cost, 2),
+        total_implementation_days=round(total_implementation_days, 1),
         covered_by={requirement_id: covered_by[requirement_id] for requirement_id in covered},
     )

@@ -1,0 +1,38 @@
+/* Дополнение для пользовательского срока внедрения. Палитра берётся из общей темы. */
+.stat-grid {
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+}
+.cost-editor {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.implementation-time-field .cost-input-wrap input {
+  min-width: 0;
+}
+.implementation-time-help {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--muted, #77849a);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.builder-duration {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted, #77849a);
+  font-size: 12px;
+}
+.solution-item span small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted, #77849a);
+  font-size: 11px;
+}
+.evaluation-stats,
+.solution-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+}
+@media (max-width: 760px) {
+  .cost-editor {
+    grid-template-columns: 1fr;
+  }
+}
