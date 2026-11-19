@@ -89,3 +89,22 @@ def test_preview_invalid_and_confirmed_import(client):
     org = [(ITEM_CODE, REQUIREMENT_CODE), ("org", "ИАФ.3")]
     assert upload(client, org, kind="org", apply=True).json()["applied"]
     assert repo.get_item("org").covers == ["ИАФ.3"]
+
+
+def test_manual_coverage_replaces_links_without_overwriting_item(client):
+    repo = seed(client)
+    url = "/api/admin/items/ru-software-17/coverage"
+    change = {"expected": ["ИАФ.3"], "covers": ["АВЗ.1", "АВЗ.1"]}
+    assert client.patch(url, json=change).status_code == 401
+    client.post("/api/auth/login", json={"login": "user", "password": "user"})
+    assert client.patch(url, json=change).status_code == 403
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    assert client.patch(url, json={**change, "covers": ["unknown"]}).status_code == 422
+    assert client.patch("/api/admin/items/org/coverage", json=change).status_code == 404
+    assert client.patch(url, json=change).json()["covers"] == ["АВЗ.1"]
+    assert client.patch(url, json=change).status_code == 200
+    assert client.patch(url, json={**change, "covers": []}).status_code == 409
+    assert client.patch(url, json={"expected": ["АВЗ.1"], "covers": []}).status_code == 200
+    item = repo.get_item("ru-software-17")
+    assert item.covers == []
+    assert item.name == "=Demo"

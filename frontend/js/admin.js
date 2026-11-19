@@ -54,7 +54,10 @@ function showPage(id) {
   if (id === "requirements") loadRequirements();
   if (id === "org") loadOrg();
   if (id === "gaps") loadGaps();
-  if (id === "tools") { loadRegistry(); pollPrices(); }
+  if (id === "tools") {
+    loadRegistry();
+    if (toolsView === "downloads") pollPrices();
+  }
   if (id === "profile") loadAdminProfile();
 }
 
@@ -251,8 +254,9 @@ function itemFormHtml(v) {
         <div><label>Код</label><input name="id" value="${esc(v.id)}" ${v.id ? "readonly" : ""} required></div>
         <div class="span-2"><label>Название</label><input name="name" value="${esc(v.name)}" required></div>
         <div class="span-2"><label>Описание</label><textarea name="description">${esc(v.description)}</textarea></div>
-        <div class="span-2"><label>Закрывает требования (через запятую)</label>
-          <input name="covers" value="${esc((v.covers || []).join(", "))}"></div>
+        ${kind === "org" ? `<div class="span-2"><label>Закрывает требования (через запятую)</label>
+          <input name="covers" value="${esc((v.covers || []).join(", "))}"></div>` :
+          `<input type="hidden" name="covers" value="${esc((v.covers || []).join(", "))}">`}
         <div><label>Производитель</label><input name="vendor" value="${esc(v.vendor)}"></div>
         <div><label>Срок внедрения, дни</label><input name="implement_days" type="number" min="0" step="0.1" value="${esc(v.implement_days)}"></div>
         <div><label><input type="checkbox" name="fstec_certified" ${v.fstec_certified ? "checked" : ""}> Сертификат ФСТЭК</label></div>
@@ -391,6 +395,29 @@ let registryState = "active";
 let registrySort = "name";
 let registryDirection = "asc";
 let registryRequest = 0;
+let toolsView = "downloads";
+
+const toolsViewButtons = [...document.querySelectorAll("[data-tools-view]")];
+const downloadsOnly = [...document.querySelectorAll("[data-downloads-only]")];
+toolsViewButtons.forEach(button => button.addEventListener("click", () => {
+  if (button.dataset.toolsView === toolsView) return;
+  toolsView = button.dataset.toolsView;
+  const downloads = toolsView === "downloads";
+  if (!downloads && registrySort === "value") {
+    registrySort = "name";
+    registryDirection = "asc";
+    registryOffset = 0;
+  }
+  toolsViewButtons.forEach(tab => {
+    tab.classList.toggle("secondary", tab !== button);
+    tab.setAttribute("aria-pressed", String(tab === button));
+  });
+  downloadsOnly.forEach(block => block.hidden = !downloads);
+  clearTimeout(priceTimer);
+  if (downloads) pollPrices();
+  document.getElementById("registry-table").replaceChildren();
+  loadRegistry();
+}));
 
 function registryParams() {
   return new URLSearchParams({q: registryQuery, state: registryState,
@@ -420,26 +447,124 @@ async function loadRegistry() {
       registryOffset = Math.max(0, Math.floor((data.total - 1) / 50) * 50);
       return loadRegistry();
     }
-    const columns = [["name", "Название"], ["covers", "Закрывает"], ["owner", "Правообладатель"],
-      ["value", "Стоимость, руб."]];
+    const downloads = toolsView === "downloads";
+    const columns = [["name", "Название"], ["covers", "Закрывает"], ["owner", "Правообладатель"]];
+    if (downloads) columns.push(["value", "Стоимость, руб."]);
     const headers = columns.map(([key, title]) => `<button type="button" class="sort-column" data-sort="${key}"
       aria-label="Сортировать: ${title}" title="Сортировка по возрастанию / убыванию">${title} ${registrySort === key ? (registryDirection === "asc" ? "↑" : "↓") : "↕"}</button>`);
     root.innerHTML = table([...headers, ""],
       data.items.map(({ item, record: r, price: p, manual_price: manual, source_url: url }) => `<tr>
         <td>${sourceLink(url, item.name)}</td><td>${esc(item.covers.join(", "))}</td><td>${esc(item.vendor)}</td>
-        <td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
+        ${downloads ? `<td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
           ${r ? `<button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
-            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button>` : ""}</td>
-        <td class="row-actions">
+            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button>` : ""}</td>` : ""}
+        <td class="row-actions">${downloads ? `
           <button class="btn secondary" data-edit data-id="${esc(item.id)}">Изменить</button>
-          <button class="btn danger" data-delete data-id="${esc(item.id)}">Удалить</button>
+          <button class="btn danger" data-delete data-id="${esc(item.id)}">Удалить</button>` : `
+          <button class="btn secondary" data-tool-coverage="${esc(item.id)}">Изменить требования</button>`}
         </td></tr>`));
-    root.removeAttribute("aria-busy");
     document.getElementById("registry-count").textContent = data.total ? `${registryOffset + 1}–${Math.min(registryOffset + 50, data.total)} из ${data.total}` : "Реестр пока пуст";
     document.getElementById("registry-prev").disabled = registryOffset === 0;
     document.getElementById("registry-next").disabled = registryOffset + 50 >= data.total;
-  } catch (err) { renderError(root, err); }
+  } catch (err) {
+    if (request === registryRequest) renderError(root, err);
+  } finally {
+    if (request === registryRequest) root.removeAttribute("aria-busy");
+  }
 }
+
+const toolCoverageDialog = document.getElementById("tool-coverage-dialog");
+const toolCoverageForm = document.getElementById("tool-coverage-form");
+const toolCoverageQuery = document.getElementById("tool-coverage-query");
+const toolCoverageCount = document.getElementById("tool-coverage-count");
+const toolCoverageOptions = document.getElementById("tool-coverage-options");
+const toolCoverageError = document.getElementById("tool-coverage-error");
+const toolCoverageSave = toolCoverageForm.querySelector('button[type="submit"]');
+let toolCoverageItem;
+let toolCoverageRequirements;
+let selectedRequirements;
+let toolCoverageBusy = false;
+
+function renderToolCoverage() {
+  const query = toolCoverageQuery.value.trim().toLocaleLowerCase("ru");
+  const matches = toolCoverageRequirements.filter(({ id, title }) =>
+    `${id} ${title}`.toLocaleLowerCase("ru").includes(query));
+  toolCoverageCount.textContent = `Выбрано: ${selectedRequirements.size}`;
+  toolCoverageOptions.innerHTML = matches.length ? matches.map(({ id, title }) => `
+    <label class="tool-coverage-option">
+      <input type="checkbox" value="${esc(id)}" ${selectedRequirements.has(id) ? "checked" : ""}>
+      <span><strong>${esc(id)}</strong> ${esc(title)}</span>
+    </label>`).join("") : "Требования не найдены.";
+}
+
+document.getElementById("registry-table").addEventListener("click", async event => {
+  const button = event.target.closest("[data-tool-coverage]");
+  if (!button || toolCoverageBusy) return;
+  toolCoverageBusy = true;
+  toolCoverageItem = null;
+  toolCoverageQuery.disabled = toolCoverageSave.disabled = true;
+  toolCoverageQuery.value = "";
+  toolCoverageCount.textContent = "";
+  toolCoverageError.textContent = "";
+  document.getElementById("tool-coverage-name").textContent = button.closest("tr").cells[0].textContent;
+  toolCoverageOptions.textContent = "Загрузка требований…";
+  toolCoverageDialog.showModal();
+  try {
+    const [item, requirements] = await Promise.all([
+      SZI.request(`/api/admin/items/${encodeURIComponent(button.dataset.toolCoverage)}`),
+      SZI.request("/api/requirements"),
+    ]);
+    if (!toolCoverageDialog.open) return;
+    toolCoverageItem = item;
+    selectedRequirements = new Set(item.covers);
+    const known = new Set(requirements.map(req => req.id));
+    toolCoverageRequirements = [...requirements, ...[...selectedRequirements]
+      .filter(id => !known.has(id)).map(id => ({ id, title: "Нет в справочнике" }))]
+      .sort((a, b) => Number(selectedRequirements.has(b.id)) - Number(selectedRequirements.has(a.id)));
+    renderToolCoverage();
+    toolCoverageQuery.disabled = toolCoverageSave.disabled = false;
+    toolCoverageQuery.focus();
+  } catch (err) {
+    toolCoverageOptions.textContent = "";
+    toolCoverageError.textContent = err.message;
+  } finally {
+    toolCoverageBusy = false;
+  }
+});
+toolCoverageQuery.addEventListener("input", renderToolCoverage);
+toolCoverageOptions.addEventListener("change", event => {
+  const checkbox = event.target;
+  if (checkbox.checked) selectedRequirements.add(checkbox.value);
+  else selectedRequirements.delete(checkbox.value);
+  toolCoverageCount.textContent = `Выбрано: ${selectedRequirements.size}`;
+});
+toolCoverageForm.addEventListener("submit", async event => {
+  if (event.submitter?.formMethod === "dialog") return;
+  event.preventDefault();
+  if (!toolCoverageItem || toolCoverageBusy) return;
+  toolCoverageBusy = true;
+  const cancel = toolCoverageForm.querySelector('[formmethod="dialog"]');
+  toolCoverageSave.disabled = cancel.disabled = toolCoverageQuery.disabled = true;
+  toolCoverageOptions.inert = true;
+  toolCoverageError.textContent = "";
+  try {
+    await SZI.request(`/api/admin/items/${encodeURIComponent(toolCoverageItem.id)}/coverage`, {
+      method: "PATCH",
+      body: JSON.stringify({ expected: toolCoverageItem.covers, covers: [...selectedRequirements] }),
+    });
+    toolCoverageDialog.close();
+    await loadRegistry();
+  } catch (err) {
+    toolCoverageError.textContent = err.message;
+  } finally {
+    toolCoverageBusy = false;
+    toolCoverageSave.disabled = cancel.disabled = toolCoverageQuery.disabled = false;
+    toolCoverageOptions.inert = false;
+  }
+});
+toolCoverageDialog.addEventListener("cancel", event => {
+  if (toolCoverageOptions.inert) event.preventDefault();
+});
 
 const priceDialog = document.getElementById("registry-price-dialog");
 const priceForm = document.getElementById("registry-price-form");
@@ -525,12 +650,12 @@ document.getElementById("registry-prev").addEventListener("click", () => { regis
 document.getElementById("registry-next").addEventListener("click", () => { registryOffset += 50; loadRegistry(); });
 
 async function pollPrices() {
-  if (activePage !== "tools") return;
+  if (activePage !== "tools" || toolsView !== "downloads") return;
   const visit = registryVisit;
   clearTimeout(priceTimer);
   try {
     const job = await SZI.request("/api/admin/registry/prices/status");
-    if (visit !== registryVisit) return;
+    if (visit !== registryVisit || toolsView !== "downloads") return;
     const running = ["running", "stopping"].includes(job.status);
     if (running) showPriceResult = true;
     const collectButton = document.getElementById("collect-prices");

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Администратор — СППР</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-1">
+  <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-2">
 </head>
 <body>
   <div class="layout">
@@ -63,7 +63,11 @@
 
       <section id="page-tools" class="hidden">
         <div class="top"><h1>Средства защиты</h1></div>
-        <div class="card registry-control-card">
+        <div class="toolbar" role="group" aria-label="Раздел средств защиты">
+          <button class="btn" type="button" data-tools-view="downloads" aria-pressed="true">Скачивание</button>
+          <button class="btn secondary" type="button" data-tools-view="coverage" aria-pressed="false">Соответствия</button>
+        </div>
+        <div class="card registry-control-card" data-downloads-only>
           <div class="toolbar registry-actions">
             <label class="btn secondary file-btn">Импорт файла
               <input type="file" accept=".xml,.xls,.xlsx,.json,.db,.sqlite,.sqlite3" data-upload="registry">
@@ -76,6 +80,10 @@
             <button class="btn" id="collect-prices" type="button">Получить стоимость</button>
             <button class="btn secondary" id="stop-prices" type="button" disabled>Остановить</button>
             <span id="price-progress" role="status"></span>
+          </div>
+          <div class="toolbar upload-bar">
+            <a class="btn secondary" href="/api/admin/coverage/review.xlsx?kind=tool" download>Скачать предложения XLSX</a>
+            <button class="btn secondary" type="button" data-coverage-kind="tool">Загрузить соответствия XLSX</button>
           </div>
         </div>
         <dialog id="registry-download-dialog">
@@ -104,12 +112,10 @@
           <button class="btn secondary" type="button" data-registry-state="excluded" aria-pressed="false">Исключённое ПО</button>
           </div>
         </div>
-        <div class="toolbar catalog-add"><button class="btn" type="button" id="add-tools">Добавить запись</button></div>
-        <div class="card toolbar upload-bar">
-          <a class="btn secondary" href="/api/admin/coverage/review.xlsx?kind=tool" download>Скачать предложения XLSX</a>
-          <button class="btn secondary" type="button" data-coverage-kind="tool">Загрузить соответствия</button>
+        <div data-downloads-only>
+          <div class="toolbar catalog-add"><button class="btn" type="button" id="add-tools">Добавить запись</button></div>
+          <div id="tool-form" class="card hidden"></div>
         </div>
-        <div id="tool-form" class="card hidden"></div>
         <form id="registry-search" class="card toolbar">
           <label for="registry-query">Поиск по коду, названию или правообладателю</label>
           <input id="registry-query" type="search"><button class="btn" type="submit">Найти</button>
@@ -120,6 +126,21 @@
           <span id="registry-count" role="status"></span>
           <button class="btn secondary" id="registry-next" type="button">Далее</button>
         </div>
+        <dialog id="tool-coverage-dialog" aria-labelledby="tool-coverage-title">
+          <form id="tool-coverage-form">
+            <h2 id="tool-coverage-title">Требования средства</h2>
+            <p id="tool-coverage-name"></p>
+            <label for="tool-coverage-query">Поиск требования по коду или названию</label>
+            <input id="tool-coverage-query" type="search">
+            <p id="tool-coverage-count" role="status"></p>
+            <div id="tool-coverage-options" role="group" aria-label="Требования"></div>
+            <div class="toolbar">
+              <button class="btn" type="submit">Сохранить</button>
+              <button class="btn secondary" type="submit" formmethod="dialog">Отмена</button>
+            </div>
+            <div id="tool-coverage-error" role="alert"></div>
+          </form>
+        </dialog>
       </section>
 
       <section id="page-org" class="hidden">
@@ -232,6 +253,6 @@
     </main>
   </div>
   <script src="/static/js/api.js"></script>
-  <script src="/static/js/admin.js?v=coverage-review-1"></script>
+  <script src="/static/js/admin.js?v=coverage-review-2"></script>
 </body>
 </html>

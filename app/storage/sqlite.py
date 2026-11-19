@@ -71,6 +71,34 @@ class SQLiteRepository(Repository):
     def delete_item(self, item_id):
         self._delete("items", item_id)
 
+    def replace_tool_coverage(
+        self, item_id: str, expected: list[str], covers: list[str]
+    ) -> Item | None:
+        with closing(sqlite3.connect(self.path)) as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute(
+                "SELECT data FROM catalog WHERE kind='items' AND id=?", (item_id,)
+            ).fetchone()
+            if row is None:
+                raise NotFoundError(item_id)
+            item = Item.model_validate_json(row[0])
+            if item.kind != "tool":
+                raise NotFoundError(item_id)
+            if item.covers != expected and item.covers != covers:
+                return None
+            known = {
+                key for (key,) in con.execute("SELECT id FROM catalog WHERE kind='requirements'")
+            }
+            unknown = set(covers).difference(item.covers, known)
+            if unknown:
+                raise ValueError(f"Неизвестные требования: {', '.join(sorted(unknown))}")
+            updated = item.model_copy(update={"covers": covers})
+            con.execute(
+                "UPDATE catalog SET data=? WHERE kind='items' AND id=?",
+                (updated.model_dump_json(), item_id),
+            )
+            return updated
+
     def list_profiles(self):
         return self._list("profiles", Profile)
 

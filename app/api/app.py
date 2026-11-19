@@ -78,6 +78,11 @@ class ManualRegistryPrice(BaseModel):
     value: float | None = Field(ge=0, allow_inf_nan=False)
 
 
+class ToolCoverageUpdate(BaseModel):
+    expected: list[str]
+    covers: list[str]
+
+
 def create_app(
     repo: Repository | None = None,
     on_shutdown: Callable[[], None] | None = None,
@@ -301,6 +306,19 @@ def create_app(
             if len(number) <= 18:
                 registry.store.delete_record(int(number))
         return {"status": "ok"}
+
+    @admin.patch("/items/{item_id}/coverage")
+    def update_tool_coverage(item_id: str, body: ToolCoverageUpdate) -> Item:
+        covers = list(dict.fromkeys(body.covers))
+        try:
+            item = repo.replace_tool_coverage(item_id, body.expected, covers)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if item is None:
+            raise HTTPException(
+                status_code=409, detail="Связи уже изменились. Откройте средство заново."
+            )
+        return item
 
     @admin.get("/profiles/{profile_id}")
     def get_profile(profile_id: str) -> Profile:

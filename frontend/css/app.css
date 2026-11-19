@@ -345,3 +345,20 @@ button:disabled { cursor: wait; opacity: .55; }
 #coverage-dialog { width: min(560px, calc(100% - 32px)); }
 #coverage-errors { max-height: 160px; overflow-y: auto; }
 .upload-bar a.btn { text-decoration: none; }
+#page-tools [data-downloads-only][hidden] { display: none; }
+#tool-coverage-dialog { width: min(620px, calc(100% - 32px)); }
+#tool-coverage-name { margin: 0 0 16px; overflow-wrap: anywhere; }
+#tool-coverage-options { max-height: min(320px, 33dvh); overflow: auto; }
+.tool-coverage-option {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: inherit;
+  font-weight: normal;
+}
+.tool-coverage-option input { width: auto; flex: none; accent-color: var(--navy); }
+#tool-coverage-form > .toolbar { margin-top: 16px; }
+#tool-coverage-error:not(:empty) { margin-top: 12px; color: var(--danger); }
