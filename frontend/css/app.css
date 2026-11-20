@@ -182,7 +182,9 @@ th, td {
 
 th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
 
-.row-actions { display: flex; gap: 8px; }
+.row-actions { white-space: nowrap; }
+.row-actions .btn + .btn { margin-inline-start: 4px; }
+.catalog-table-scroll { overflow-x: auto; }
 
 .hidden { display: none !important; }
 
@@ -277,6 +279,7 @@ button:disabled { cursor: wait; opacity: .55; }
   display: grid;
   gap: 16px;
 }
+#registry-import-date { margin: 0; }
 
 .registry-control-card [role="status"]:empty { display: none; }
 .registry-control-card [role="status"] { overflow-wrap: anywhere; }
@@ -325,15 +328,15 @@ button:disabled { cursor: wait; opacity: .55; }
   .side { z-index: 2; height: auto; max-height: 45dvh; }
 }
 
-#registry-table .row-actions { min-width: 164px; white-space: nowrap; }
+#registry-table .row-actions { min-width: 164px; }
 #registry-table .row-actions .btn {
-  flex: none;
   padding: 7px 9px;
   font-size: 13px;
   white-space: nowrap;
 }
-#admin-user-dialog { width: min(440px, calc(100% - 32px)); }
-#admin-user-form > .toolbar { margin-top: 16px; }
+#admin-user-dialog, #admin-user-delete-dialog { width: min(440px, calc(100% - 32px)); }
+#admin-user-form > .toolbar, #admin-user-delete-form > .toolbar { margin-top: 16px; }
+#admin-user-delete-error:not(:empty) { margin-top: 12px; color: var(--danger); }
 #page-export a.btn { text-decoration: none; }
 
 .catalog-controls { justify-content: space-between; align-items: center; }
@@ -342,3 +345,41 @@ button:disabled { cursor: wait; opacity: .55; }
 #req-table > form, #org-table > form { margin-bottom: 16px; }
 
 .catalog-add, #req-form, #tool-form, #org-form { margin-bottom: 16px; }
+.catalog-tabs { margin-bottom: 16px; }
+.catalog-add-inset { padding-inline: 19px; }
+#coverage-dialog { width: min(560px, calc(100% - 32px)); }
+#coverage-errors { max-height: 160px; overflow-y: auto; }
+.upload-bar a.btn { text-decoration: none; }
+[data-view-panel][hidden] { display: none; }
+html:has(#item-coverage-dialog) { scrollbar-gutter: stable; }
+html:has(#item-coverage-dialog:modal) { overflow: hidden; }
+#item-coverage-dialog {
+  width: min(620px, calc(100% - 32px));
+  overscroll-behavior: contain;
+}
+#item-coverage-name { margin: 0 0 16px; overflow-wrap: anywhere; }
+#item-coverage-suggestions:not([hidden]) {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  max-height: 25dvh;
+  overflow: auto;
+}
+#item-coverage-suggestions h3 { margin: 0 0 6px; font-size: 16px; }
+#item-coverage-suggestions p { margin: 0; }
+.item-coverage-reason { display: block; margin-top: 3px; color: var(--muted); font-size: 13px; }
+#item-coverage-options { max-height: min(320px, 33dvh); overflow: auto; }
+.item-coverage-option {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: inherit;
+  font-weight: normal;
+}
+.item-coverage-option input { width: auto; flex: none; accent-color: var(--navy); }
+#item-coverage-form > .toolbar { margin-top: 16px; }
+#item-coverage-error:not(:empty) { margin-top: 12px; color: var(--danger); }

@@ -173,11 +173,25 @@ class RegistryImporter(Importer):
         return records, errors
 
     def parse_xml(self, path: Path) -> tuple[list[RegistryRecord], list[str]]:
+        records, errors, _ = self.read_xml(path)
+        return records, errors
+
+    def read_xml(self, path: Path) -> tuple[list[RegistryRecord], list[str], str | None]:
         with path.open("rb") as source:
             if b"<!DOCTYPE" in source.read(8192).upper():
                 raise ValueError("XML с DTD не поддерживается")
         records, errors, seen = [], [], set()
-        for _, element in ElementTree.iterparse(path, events=("end",)):
+        source_date = None
+        for event, element in ElementTree.iterparse(path, events=("start", "end")):
+            if event == "start":
+                if element.tag == "registry" and (generated := element.get("genDate")):
+                    for pattern in ("%Y.%m.%d", "%Y-%m-%d", "%d.%m.%Y"):
+                        try:
+                            source_date = datetime.strptime(generated[:10], pattern).date()
+                            break
+                        except ValueError:
+                            continue
+                continue
             if element.tag != "item" or element.find("registrationNumber") is None:
                 continue
 
@@ -219,7 +233,7 @@ class RegistryImporter(Importer):
             element.clear()
         if not records:
             raise ValueError("В XML не найдены записи реестра")
-        return records, errors
+        return records, errors, source_date.isoformat() if source_date else None
 
     def parse(self, path: Path) -> tuple[DataBundle, list[str]]:
         records, errors = self.parse_records(path)

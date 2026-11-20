@@ -71,6 +71,32 @@ class SQLiteRepository(Repository):
     def delete_item(self, item_id):
         self._delete("items", item_id)
 
+    def replace_item_coverage(
+        self, item_id: str, expected: list[str], covers: list[str]
+    ) -> Item | None:
+        with closing(sqlite3.connect(self.path)) as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute(
+                "SELECT data FROM catalog WHERE kind='items' AND id=?", (item_id,)
+            ).fetchone()
+            if row is None:
+                raise NotFoundError(item_id)
+            item = Item.model_validate_json(row[0])
+            if item.covers != expected and item.covers != covers:
+                return None
+            known = {
+                key for (key,) in con.execute("SELECT id FROM catalog WHERE kind='requirements'")
+            }
+            unknown = set(covers).difference(item.covers, known)
+            if unknown:
+                raise ValueError(f"Неизвестные требования: {', '.join(sorted(unknown))}")
+            updated = item.model_copy(update={"covers": covers})
+            con.execute(
+                "UPDATE catalog SET data=? WHERE kind='items' AND id=?",
+                (updated.model_dump_json(), item_id),
+            )
+            return updated
+
     def list_profiles(self):
         return self._list("profiles", Profile)
 
@@ -94,6 +120,48 @@ class SQLiteRepository(Repository):
                     )
                     count += 1
         return count
+
+    def review_coverage(self, links, kind: ItemKind, *, apply: bool, has_errors: bool):
+        """Проверить связи и при подтверждении добавить их в одной транзакции."""
+        added = existing = 0
+        errors = []
+        with closing(sqlite3.connect(self.path)) as con, con:
+            con.execute("BEGIN IMMEDIATE" if apply else "BEGIN")
+            requirements = {
+                key for (key,) in con.execute("SELECT id FROM catalog WHERE kind='requirements'")
+            }
+            pending = {}
+            items = {}
+            for number, item_id, requirement in links:
+                if item_id not in items:
+                    row = con.execute(
+                        "SELECT data FROM catalog WHERE kind='items' AND id=?", (item_id,)
+                    ).fetchone()
+                    items[item_id] = Item.model_validate_json(row[0]) if row else None
+                item = items[item_id]
+                if item is None or item.kind != kind:
+                    errors.append(f"Строка {number}: позиция «{item_id}» отсутствует в разделе")
+                    continue
+                if requirement not in requirements:
+                    errors.append(f"Строка {number}: неизвестное требование «{requirement}»")
+                    continue
+                covers = pending.setdefault(item_id, dict.fromkeys(item.covers))
+                if requirement in covers:
+                    existing += 1
+                else:
+                    covers[requirement] = None
+                    added += 1
+            if apply and not (has_errors or errors):
+                for item_id, covers in pending.items():
+                    item = items[item_id]
+                    if list(covers) == item.covers:
+                        continue
+                    updated = item.model_copy(update={"covers": list(covers)})
+                    con.execute(
+                        "UPDATE catalog SET data=? WHERE kind='items' AND id=?",
+                        (updated.model_dump_json(), item_id),
+                    )
+        return added, existing, errors
 
     def export_bundle(self):
         return DataBundle(

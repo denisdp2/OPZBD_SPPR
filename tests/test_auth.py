@@ -134,3 +134,24 @@ def test_admin_can_update_another_users_role_and_password(client):
         ]
         == "admin"
     )
+
+
+def test_admin_can_delete_user_and_invalidate_drafts_and_sessions(client):
+    user = client.post(
+        "/api/auth/register", json={"login": "delete-me", "password": "delete-test-pass"}
+    ).json()
+    client.post("/api/auth/login", json={"login": user["login"], "password": "delete-test-pass"})
+    user_cookie = dict(client.cookies)
+    route = f"/api/admin/users/{user['id']}"
+    assert client.put(f"/api/users/{user['id']}/draft", json={}).status_code == 204
+    assert client.request("DELETE", route, json={"current_password": "admin"}).status_code == 403
+    admin = client.post("/api/auth/login", json={"login": "admin", "password": "admin"}).json()
+    password = {"current_password": "admin"}
+    self_route = f"/api/admin/users/{admin['id']}"
+    assert client.request("DELETE", self_route, json=password).status_code == 409
+    assert client.request("DELETE", route, json={"current_password": "bad"}).status_code == 403
+    assert client.request("DELETE", route, json=password).status_code == 204
+    assert client.app.state.auth.read_draft(user["id"]) is None
+    client.cookies.clear()
+    client.cookies.update(user_cookie)
+    assert client.get("/api/auth/me").status_code == 401

@@ -28,11 +28,13 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import BaseModel, Field, ValidationError
 
 from app import __version__, paths
 from app.auth.deps import COOKIE_NAME, current_user, require_admin, require_login
 from app.auth.schemas import (
+    AdminPasswordConfirmation,
     AdminProfileUpdate,
     AdminUserUpdate,
     AuthUser,
@@ -57,6 +59,12 @@ from app.core.models import (
 )
 from app.core.problem import ScenarioError, build_problem
 from app.evaluation import evaluate as evaluate_problem
+from app.importers.coverage_review import (
+    MAX_FILE_SIZE,
+    read_review,
+    review_workbook,
+    suggest_coverage,
+)
 from app.importers.registry_download import download_registry_export, download_registry_xml
 from app.importers.service import RegistryService
 from app.optimization import UnknownOptimizer, get_optimizer
@@ -69,6 +77,11 @@ from app.storage.sqlite import SQLiteRepository
 
 class ManualRegistryPrice(BaseModel):
     value: float | None = Field(ge=0, allow_inf_nan=False)
+
+
+class ItemCoverageUpdate(BaseModel):
+    expected: list[str]
+    covers: list[str]
 
 
 def create_app(
@@ -295,6 +308,19 @@ def create_app(
                 registry.store.delete_record(int(number))
         return {"status": "ok"}
 
+    @admin.patch("/items/{item_id}/coverage")
+    def update_item_coverage(item_id: str, body: ItemCoverageUpdate) -> Item:
+        covers = list(dict.fromkeys(body.covers))
+        try:
+            item = repo.replace_item_coverage(item_id, body.expected, covers)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if item is None:
+            raise HTTPException(
+                status_code=409, detail="Связи уже изменились. Откройте запись заново."
+            )
+        return item
+
     @admin.get("/profiles/{profile_id}")
     def get_profile(profile_id: str) -> Profile:
         return repo.get_profile(profile_id)
@@ -315,6 +341,75 @@ def create_app(
     def gaps() -> list[Requirement]:
         """Требования, которые не закрывает ни одно средство или мера."""
         return repo.uncovered_requirements()
+
+    @admin.get("/coverage/review.xlsx")
+    def export_coverage_review(kind: ItemKind = "tool") -> Response:
+        records = {}
+        if kind == "tool":
+            records = {
+                f"ru-software-{record.reg_number}": record.model_dump()
+                for record in registry.store.coverage_records()
+            }
+        requirements = {req.id: req for req in repo.list_requirements()}
+        rows = suggest_coverage(repo.list_items(kind=kind), requirements, records)
+        return Response(
+            review_workbook(rows),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="coverage-{kind}.xlsx"'},
+        )
+
+    @admin.get("/items/{item_id}/coverage/suggestions")
+    def item_coverage_suggestions(item_id: str) -> dict:
+        item = repo.get_item(item_id)
+        number = item_id.removeprefix("ru-software-")
+        record = None
+        if item.kind == "tool" and item_id != number and number.isascii() and number.isdecimal():
+            if len(number) <= 18:
+                record = registry.store.get_record(int(number))
+        requirements = {req.id: req for req in repo.list_requirements()}
+        records = {item_id: record.model_dump()} if record else {}
+        rows = suggest_coverage([item], requirements, records)
+        return {
+            "item": item,
+            "requirements": list(requirements.values()),
+            "docs_url": record.docs_url if record else "",
+            "suggestions": [
+                {"id": code, "title": title, "reason": reason}
+                for _, code, _, title, reason, _, _ in rows
+                if code
+            ],
+        }
+
+    @admin.post("/coverage/import")
+    def import_coverage(file: UploadFile, kind: ItemKind = "tool", apply: bool = False) -> dict:
+        if not isinstance(repo, SQLiteRepository):
+            raise HTTPException(status_code=501, detail="Импорт связей доступен для SQLite")
+        try:
+            if Path(file.filename or "").suffix.lower() != ".xlsx":
+                raise HTTPException(status_code=422, detail="Выберите файл XLSX")
+            content = file.file.read(MAX_FILE_SIZE + 1)
+            if len(content) > MAX_FILE_SIZE:
+                raise HTTPException(status_code=413, detail="Размер файла превышает 12 МБ")
+            links, skipped, errors = read_review(content)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except (BadZipFile, InvalidFileException, KeyError, ParseError, OSError, IndexError) as exc:
+            raise HTTPException(status_code=422, detail="Не удалось прочитать файл XLSX") from exc
+        finally:
+            file.file.close()
+
+        added, existing, validation = repo.review_coverage(
+            links, kind, apply=apply, has_errors=bool(errors)
+        )
+        errors.extend(validation)
+        return {
+            "added": added,
+            "existing": existing,
+            "skipped": skipped,
+            "error_count": len(errors),
+            "errors": errors[:20],
+            "applied": apply and not errors,
+        }
 
     @admin.post("/import/{importer_name}")
     def import_file(importer_name: str, file: UploadFile) -> ImportReport:
@@ -387,6 +482,18 @@ def create_app(
         if result is None:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         return AuthUser(id=result.id, login=result.login, role=result.role)
+
+    @admin.delete("/users/{user_id}", status_code=204)
+    def delete_user(
+        user_id: int, body: AdminPasswordConfirmation, user: User = Depends(require_admin)
+    ) -> None:
+        if user_id == user.id:
+            raise HTTPException(status_code=409, detail="Нельзя удалить свой аккаунт")
+        result = auth.delete_user(user.id, user_id, body.current_password)
+        if result is False:
+            raise HTTPException(status_code=403, detail="Неверный пароль администратора")
+        if result is None:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     @admin.put("/profile")
     def update_profile(body: AdminProfileUpdate, user: User = Depends(require_admin)) -> AuthUser:
@@ -474,6 +581,10 @@ def create_app(
             headers={"Content-Disposition": 'attachment; filename="registry.xlsx"'},
         )
 
+    @admin.get("/registry/import-status")
+    def registry_import_status() -> dict[str, str | None]:
+        return registry.store.import_status()
+
     def save_registry_export(format: str) -> tuple[Path, bool]:
         cache = paths.data_dir() / "registry-cache" / f"registry.{format}"
         try:
@@ -489,9 +600,18 @@ def create_app(
         except (httpx.HTTPError, ValueError, OSError) as exc:
             if cache.is_file():
                 return cache, True
-            message = "Не удалось сохранить выгрузку реестра."
             if "CERTIFICATE_VERIFY_FAILED" in str(exc):
-                message += " Сертификат сайта не доверен этой системе."
+                message = "Сертификат официального сайта не доверен этой системе."
+            elif isinstance(exc, httpx.HTTPStatusError):
+                message = f"Официальный сайт вернул HTTP {exc.response.status_code}."
+            elif isinstance(exc, httpx.RequestError):
+                message = "Официальный сайт реестра недоступен."
+            elif isinstance(exc, ValueError):
+                message = f"{exc}."
+            else:
+                raise HTTPException(
+                    status_code=500, detail="Не удалось записать официальную выгрузку на диск."
+                ) from exc
             raise HTTPException(status_code=502, detail=message) from exc
 
     @admin.post("/registry/download/{format}")

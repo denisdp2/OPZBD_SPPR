@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Администратор — СППР</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=admin-layout-6">
+  <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-6">
 </head>
 <body>
   <div class="layout">
@@ -63,7 +63,12 @@
 
       <section id="page-tools" class="hidden">
         <div class="top"><h1>Средства защиты</h1></div>
-        <div class="card registry-control-card">
+        <div class="toolbar catalog-tabs" role="group" aria-label="Раздел средств защиты">
+          <button class="btn" type="button" data-catalog-view="downloads" aria-pressed="true">Загрузка средств</button>
+          <button class="btn secondary" type="button" data-catalog-view="coverage" aria-pressed="false">Связи с требованиями</button>
+        </div>
+        <div class="card registry-control-card" data-view-panel="downloads">
+          <p id="registry-import-date" role="status"></p>
           <div class="toolbar registry-actions">
             <label class="btn secondary file-btn">Импорт файла
               <input type="file" accept=".xml,.xls,.xlsx,.json,.db,.sqlite,.sqlite3" data-upload="registry">
@@ -78,11 +83,15 @@
             <span id="price-progress" role="status"></span>
           </div>
         </div>
+        <div class="card toolbar upload-bar" data-view-panel="coverage" hidden>
+          <a class="btn secondary" href="/api/admin/coverage/review.xlsx?kind=tool" download>Скачать предложения XLSX</a>
+          <button class="btn secondary" type="button" data-coverage-kind="tool">Загрузить соответствия XLSX</button>
+        </div>
         <dialog id="registry-download-dialog">
           <h2>Скачать реестр</h2>
           <div class="toolbar">
-            <button class="btn" data-official-format="xml" type="button">XML</button>
-            <button class="btn" data-official-format="xls" type="button">XLS</button>
+            <button class="btn secondary" data-registry-export="xml" type="button">Официальный XML</button>
+            <button class="btn secondary" data-registry-export="xls" type="button">Официальный XLS</button>
             <form method="dialog"><button class="btn secondary">Закрыть</button></form>
           </div>
         </dialog>
@@ -104,8 +113,10 @@
           <button class="btn secondary" type="button" data-registry-state="excluded" aria-pressed="false">Исключённое ПО</button>
           </div>
         </div>
-        <div class="toolbar catalog-add"><button class="btn" type="button" id="add-tools">Добавить запись</button></div>
-        <div id="tool-form" class="card hidden"></div>
+        <div data-view-panel="downloads">
+          <div class="toolbar catalog-add catalog-add-inset"><button class="btn" type="button" id="add-tools">Добавить запись</button></div>
+          <div id="tool-form" class="card hidden"></div>
+        </div>
         <form id="registry-search" class="card toolbar">
           <label for="registry-query">Поиск по коду, названию или правообладателю</label>
           <input id="registry-query" type="search"><button class="btn" type="submit">Найти</button>
@@ -119,22 +130,44 @@
       </section>
 
       <section id="page-org" class="hidden">
-        <div class="top">
-          <div>
-            <p class="eyebrow">Справочник</p>
-            <h1>Организационные меры</h1>
-          </div>
+        <div class="top"><h1>Организационные меры</h1></div>
+        <div class="toolbar catalog-tabs" role="group" aria-label="Раздел организационных мер">
+          <button class="btn" type="button" data-catalog-view="downloads" aria-pressed="true">Загрузка мер</button>
+          <button class="btn secondary" type="button" data-catalog-view="coverage" aria-pressed="false">Связи с требованиями</button>
         </div>
-        <div class="card toolbar upload-bar">
+        <div class="card toolbar upload-bar" data-view-panel="downloads">
           <label class="btn secondary file-btn">Импортировать JSON
             <input type="file" accept=".json" data-upload="org">
           </label>
           <span class="upload-status" data-upload-status="org"></span>
         </div>
-        <div class="toolbar catalog-add"><button class="btn" type="button" id="add-org">Добавить запись</button></div>
-        <div id="org-form" class="card hidden"></div>
+        <div data-view-panel="downloads">
+          <div class="toolbar catalog-add catalog-add-inset"><button class="btn" type="button" id="add-org">Добавить запись</button></div>
+          <div id="org-form" class="card hidden"></div>
+        </div>
+        <div class="card toolbar upload-bar" data-view-panel="coverage" hidden>
+          <a class="btn secondary" href="/api/admin/coverage/review.xlsx?kind=org" download>Скачать предложения XLSX</a>
+          <button class="btn secondary" type="button" data-coverage-kind="org">Загрузить соответствия XLSX</button>
+        </div>
         <div id="org-table"></div>
       </section>
+
+      <dialog id="item-coverage-dialog" aria-labelledby="item-coverage-title">
+          <form id="item-coverage-form">
+            <h2 id="item-coverage-title">Изменить требования</h2>
+            <p id="item-coverage-name"></p>
+            <div id="item-coverage-suggestions" hidden></div>
+            <label for="item-coverage-query">Поиск требования по коду или названию</label>
+            <input id="item-coverage-query" type="search">
+            <p id="item-coverage-count" role="status"></p>
+            <div id="item-coverage-options" role="group" aria-label="Требования"></div>
+            <div class="toolbar">
+              <button class="btn" type="submit">Сохранить</button>
+              <button class="btn secondary" type="submit" formmethod="dialog">Отмена</button>
+            </div>
+            <div id="item-coverage-error" role="alert"></div>
+          </form>
+      </dialog>
 
 
       <section id="page-gaps" class="hidden">
@@ -194,6 +227,19 @@
             <div id="admin-user-error" role="status"></div>
           </form>
         </dialog>
+        <dialog id="admin-user-delete-dialog" aria-labelledby="admin-user-delete-title">
+          <form id="admin-user-delete-form">
+            <h2 id="admin-user-delete-title">Удалить пользователя?</h2>
+            <p>Аккаунт <strong id="admin-user-delete-login"></strong> и его сохранённый сценарий будут удалены. Активные сессии завершатся.</p>
+            <label for="admin-user-delete-password">Ваш пароль администратора</label>
+            <input id="admin-user-delete-password" name="current_password" type="password" autocomplete="current-password" required maxlength="128">
+            <div class="toolbar">
+              <button class="btn secondary" type="submit" formmethod="dialog" formnovalidate>Отмена</button>
+              <button class="btn danger" type="submit">Удалить пользователя</button>
+            </div>
+            <div id="admin-user-delete-error" role="alert"></div>
+          </form>
+        </dialog>
       </section>
       <dialog id="catalog-delete-dialog" aria-labelledby="catalog-delete-title">
         <form method="dialog">
@@ -205,9 +251,25 @@
           </div>
         </form>
       </dialog>
+      <dialog id="coverage-dialog" aria-labelledby="coverage-title">
+        <form id="coverage-form">
+          <h2 id="coverage-title">Загрузить соответствия</h2>
+          <p>В таблице предложений укажите «Принять» в столбце «Решение».
+            Для готовых связей достаточно столбцов «Код позиции» и «Код требования».</p>
+          <label for="coverage-file">Файл XLSX</label>
+          <input type="file" id="coverage-file" name="file" accept=".xlsx" required>
+          <p id="coverage-report" role="status"></p>
+          <ul id="coverage-errors" hidden></ul>
+          <div class="toolbar">
+            <button class="btn secondary" type="submit" value="preview">Проверить</button>
+            <button class="btn" type="submit" value="apply" disabled>Применить</button>
+            <button class="btn secondary" type="submit" formmethod="dialog" formnovalidate>Закрыть</button>
+          </div>
+        </form>
+      </dialog>
     </main>
   </div>
   <script src="/static/js/api.js"></script>
-  <script src="/static/js/admin.js?v=admin-layout-6"></script>
+  <script src="/static/js/admin.js?v=coverage-review-6"></script>
 </body>
 </html>
