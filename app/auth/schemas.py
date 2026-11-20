@@ -16,7 +16,7 @@ class RegisterRequest(BaseModel):
 class DraftPrice(BaseModel):
     capex: float | Literal[""] = Field(default="")
     opex_month: float | Literal[""] = Field(default="")
-
+    implement_days: float | Literal[""] = Field(default="")
 
 class UserDraft(BaseModel):
     profile_id: str = ""
