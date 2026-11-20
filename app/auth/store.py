@@ -88,10 +88,7 @@ class AuthStore:
     ) -> User | Literal[False] | None:
         with self._db() as con:
             con.execute("BEGIN IMMEDIATE")
-            admin = con.execute(
-                "SELECT password_hash FROM users WHERE id = ? AND role = 'admin'", (admin_id,)
-            ).fetchone()
-            if admin is None or not verify_password(current_password, admin["password_hash"]):
+            if not self._verify_admin(con, admin_id, current_password):
                 return False
             row = con.execute(
                 "SELECT login, role, password_hash FROM users WHERE id = ?", (user_id,)
@@ -108,6 +105,21 @@ class AuthStore:
                 )
                 con.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
             return User(id=user_id, login=row["login"], role=role)
+
+    @staticmethod
+    def _verify_admin(con: sqlite3.Connection, admin_id: int, password: str) -> bool:
+        admin = con.execute(
+            "SELECT password_hash FROM users WHERE id = ? AND role = 'admin'", (admin_id,)
+        ).fetchone()
+        return admin is not None and verify_password(password, admin["password_hash"])
+
+    def delete_user(self, admin_id: int, user_id: int, password: str) -> bool | None:
+        with self._db() as con:
+            con.execute("BEGIN IMMEDIATE")
+            if admin_id == user_id or not self._verify_admin(con, admin_id, password):
+                return False
+            deleted = con.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            return True if deleted.rowcount else None
 
     def update_profile(
         self, user: User, login: str, current_password: str, new_password: str | None

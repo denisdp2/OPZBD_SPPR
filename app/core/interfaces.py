@@ -67,6 +67,12 @@ class Repository(ABC):
     @abstractmethod
     def delete_item(self, item_id: str) -> None: ...
 
+    @abstractmethod
+    def replace_item_coverage(
+        self, item_id: str, expected: list[str], covers: list[str]
+    ) -> Item | None:
+        """Сохранить связи и вернуть позицию или None при конфликте изменений."""
+
     # ---- профили обязательности ----
     @abstractmethod
     def list_profiles(self) -> list[Profile]: ...

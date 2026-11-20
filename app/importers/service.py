@@ -26,11 +26,17 @@ class RegistryService:
         self.job = {"status": "idle", "total": 0, "done": 0, "errors": 0}
 
     def import_file(self, path: Path) -> ImportReport:
-        if path.suffix.lower() in LegacyRegistryImporter.extensions:
+        suffix = path.suffix.lower()
+        source_date = None
+        if suffix in LegacyRegistryImporter.extensions:
             records, results, errors = LegacyRegistryImporter().read_source(path)
             importer = LegacyRegistryImporter.name
         else:
-            records, errors = RegistryImporter().parse_records(path)
+            parser = RegistryImporter()
+            if suffix == ".xml":
+                records, errors, source_date = parser.read_xml(path)
+            else:
+                records, errors = parser.parse_records(path)
             results = {}
             importer = RegistryImporter.name
         items = []
@@ -49,7 +55,7 @@ class RegistryService:
                 )
             items.append(fresh)
         self.repo.import_bundle(DataBundle(items=items))
-        self.store.upsert(records)
+        self.store.upsert(records, imported=True, source_date=source_date)
         if results:
             self.store.restore_prices(results)
         return ImportReport(importer=importer, imported=len(items), errors=errors)
