@@ -37,6 +37,13 @@ if (panel) {
   let height = 0;
   let dpr = 1;
   let resizeObserver = null;
+  let filterPanel = null;
+  let filterList = null;
+  let filterSearch = null;
+  let filterStatus = null;
+  let filterCount = null;
+  // Индексы относятся к полному массиву points: цвет и номер не меняются при фильтрации.
+  let visibleIndexes = new Set();
 
   function setStatus(message, kind = "info") {
     status.textContent = message;
@@ -98,7 +105,212 @@ if (panel) {
   }
 
   function pointColor(index) {
-    return pointColors[index % pointColors.length];
+    // Золотой угол распределяет оттенки по палитре и не повторяет первые 12 цветов.
+    const hue = (index * 137.508) % 360;
+    return `hsl(${hue.toFixed(1)} 68% 42%)`;
+  }
+
+  function ensureFilterPanel() {
+    if (filterPanel) return;
+
+    filterPanel = document.createElement("details");
+    filterPanel.className = "pareto-3d-filter-panel";
+    filterPanel.open = true;
+
+    const summary = document.createElement("summary");
+    const summaryTitle = document.createElement("strong");
+    summaryTitle.textContent = "Точки на графике";
+    filterCount = document.createElement("span");
+    filterCount.className = "pareto-3d-filter-count";
+    summary.append(summaryTitle, filterCount);
+
+    const body = document.createElement("div");
+    body.className = "pareto-3d-filter-body";
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "pareto-3d-filter-toolbar";
+
+    filterSearch = document.createElement("input");
+    filterSearch.type = "search";
+    filterSearch.className = "pareto-3d-filter-search";
+    filterSearch.placeholder = "Найти вариант по номеру или составу…";
+    filterSearch.setAttribute("aria-label", "Поиск вариантов фронта Парето");
+
+    filterStatus = document.createElement("select");
+    filterStatus.className = "pareto-3d-filter-status-select";
+    filterStatus.setAttribute("aria-label", "Фильтр по закрытию обязательных требований");
+    for (const optionData of [
+      ["all", "Все варианты"],
+      ["feasible", "Обязательные закрыты"],
+      ["infeasible", "Есть незакрытые обязательные"],
+    ]) {
+      const option = document.createElement("option");
+      option.value = optionData[0];
+      option.textContent = optionData[1];
+      filterStatus.append(option);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "pareto-3d-filter-actions";
+    const showButton = document.createElement("button");
+    showButton.type = "button";
+    showButton.className = "button button-quiet button-small";
+    showButton.dataset.visibilityAction = "show";
+    showButton.textContent = "Показать найденные";
+    const hideButton = document.createElement("button");
+    hideButton.type = "button";
+    hideButton.className = "button button-quiet button-small";
+    hideButton.dataset.visibilityAction = "hide";
+    hideButton.textContent = "Скрыть найденные";
+    actions.append(showButton, hideButton);
+    toolbar.append(filterSearch, filterStatus, actions);
+
+    filterList = document.createElement("div");
+    filterList.className = "pareto-3d-filter-list";
+    filterList.setAttribute("role", "list");
+
+    body.append(toolbar, filterList);
+    filterPanel.append(summary, body);
+    const legendAfter = panel.querySelector(".pareto-3d-legend");
+    if (legendAfter) {
+      legendAfter.insertAdjacentElement("afterend", filterPanel);
+    } else {
+      stage.insertAdjacentElement("afterend", filterPanel);
+    }
+
+    filterSearch.addEventListener("input", renderFilterList);
+    filterStatus.addEventListener("change", renderFilterList);
+
+    filterPanel.addEventListener("change", (event) => {
+      const checkbox = event.target.closest("input[data-point-visible]");
+      if (!checkbox) return;
+      const index = Number(checkbox.dataset.pointVisible);
+      if (!Number.isInteger(index) || index < 0 || index >= points.length) return;
+      if (checkbox.checked) visibleIndexes.add(index);
+      else visibleIndexes.delete(index);
+      refreshPointVisibility();
+    });
+
+    filterPanel.addEventListener("click", (event) => {
+      const action = event.target.closest("button[data-visibility-action]");
+      if (action) {
+        const show = action.dataset.visibilityAction === "show";
+        for (const entry of getFilteredPointEntries()) {
+          if (show) visibleIndexes.add(entry.index);
+          else visibleIndexes.delete(entry.index);
+        }
+        refreshPointVisibility();
+        return;
+      }
+
+      const selectButton = event.target.closest("button[data-point-select]");
+      if (!selectButton) return;
+      const index = Number(selectButton.dataset.pointSelect);
+      if (!Number.isInteger(index) || !points[index]) return;
+      focusedIndex = index;
+      hoverIndex = -1;
+      showPoint(points[index], index);
+      renderFilterList();
+      draw();
+    });
+  }
+
+  function getFilteredPointEntries() {
+    const query = (filterSearch?.value ?? "").trim().toLocaleLowerCase("ru-RU");
+    const mode = filterStatus?.value ?? "all";
+    return points.map((point, index) => ({ point, index })).filter(({ point, index }) => {
+      if (mode === "feasible" && !point.feasible) return false;
+      if (mode === "infeasible" && point.feasible) return false;
+      if (!query) return true;
+      const statusText = point.feasible ? "обязательные закрыты допустимый" : "есть незакрытые обязательные недопустимый";
+      const selectedText = Array.isArray(point.selected) ? point.selected.join(" ") : "";
+      const haystack = `вариант ${index + 1} ${statusText} ${selectedText} ${point.covered_count} ${point.cost} ${point.total_implementation_days}`.toLocaleLowerCase("ru-RU");
+      return haystack.includes(query);
+    });
+  }
+
+  function renderFilterList() {
+    if (!filterPanel || !filterList) return;
+    filterList.replaceChildren();
+    const entries = getFilteredPointEntries();
+    if (!entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "pareto-3d-filter-empty";
+      empty.textContent = "По заданному фильтру варианты не найдены.";
+      filterList.append(empty);
+    }
+
+    for (const { point, index } of entries) {
+      const item = document.createElement("div");
+      item.className = "pareto-3d-filter-item";
+      item.setAttribute("role", "listitem");
+      if (index === selectedIndex) item.classList.add("is-algorithm-selected");
+      if (index === focusedIndex) item.classList.add("is-focused");
+
+      const toggle = document.createElement("label");
+      toggle.className = "pareto-3d-filter-toggle";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = visibleIndexes.has(index);
+      checkbox.dataset.pointVisible = String(index);
+      checkbox.setAttribute("aria-label", `Показывать вариант ${index + 1} на графике`);
+      const swatch = document.createElement("span");
+      swatch.className = "pareto-3d-filter-swatch";
+      swatch.style.backgroundColor = pointColor(index);
+      toggle.append(checkbox, swatch);
+
+      const content = document.createElement("div");
+      content.className = "pareto-3d-filter-content";
+      const selectButton = document.createElement("button");
+      selectButton.type = "button";
+      selectButton.className = "pareto-3d-filter-select";
+      selectButton.dataset.pointSelect = String(index);
+
+      const heading = document.createElement("span");
+      heading.className = "pareto-3d-filter-heading";
+      const name = document.createElement("strong");
+      name.textContent = `Вариант ${index + 1}`;
+      const state = document.createElement("span");
+      state.className = `pareto-3d-filter-state ${point.feasible ? "is-feasible" : "is-infeasible"}`;
+      state.textContent = point.feasible ? "Обязательные закрыты" : "Есть незакрытые обязательные";
+      heading.append(name, state);
+
+      const metrics = document.createElement("small");
+      metrics.className = "pareto-3d-filter-metrics";
+      metrics.textContent = `${money.format(Number(point.cost) || 0)} · ${integer.format(Number(point.covered_count) || 0)} требований · ${formatDays(point.total_implementation_days)}`;
+      selectButton.append(heading, metrics);
+      content.append(selectButton);
+
+      if (index === selectedIndex) {
+        const algorithmBadge = document.createElement("span");
+        algorithmBadge.className = "pareto-3d-filter-algorithm-badge";
+        algorithmBadge.textContent = "Выбран алгоритмом";
+        content.append(algorithmBadge);
+      }
+
+      item.append(toggle, content);
+      filterList.append(item);
+    }
+
+    if (filterCount) {
+      filterCount.textContent = `На графике ${visibleIndexes.size} из ${points.length} · в списке ${entries.length}`;
+    }
+  }
+
+  function refreshPointVisibility() {
+    if (hoverIndex >= 0 && !visibleIndexes.has(hoverIndex)) hoverIndex = -1;
+    if (focusedIndex >= 0 && !visibleIndexes.has(focusedIndex)) focusedIndex = -1;
+    const restoreIndex = focusedIndex >= 0
+      ? focusedIndex
+      : (selectedIndex >= 0 && visibleIndexes.has(selectedIndex) ? selectedIndex : -1);
+    showPoint(restoreIndex >= 0 ? points[restoreIndex] : null, restoreIndex);
+    renderFilterList();
+    draw();
+    if (visibleIndexes.size === 0) {
+      setStatus("Все точки скрыты. Отметьте варианты в списке ниже, чтобы вернуть их на график.", "warning");
+    } else {
+      setStatus(`На графике ${integer.format(visibleIndexes.size)} из ${integer.format(points.length)} решений. Скрытые варианты остаются в исходных результатах.`, "success");
+    }
   }
 
   function addText(parent, tag, className, value) {
@@ -219,32 +431,20 @@ if (panel) {
   function renderLegend() {
     if (!legend) return;
     legend.replaceChildren();
-    points.slice(0, 12).forEach((point, index) => {
-      const entry = document.createElement("span");
-      const dot = document.createElement("i");
-      dot.className = "pareto-3d-dot";
-      dot.style.backgroundColor = pointColor(index);
-      entry.append(dot);
-      addText(entry, "span", "", `Вариант ${index + 1}`);
-      legend.append(entry);
-    });
-    if (points.length > 12) {
-      addText(legend, "span", "pareto-3d-legend-more", `+ ещё ${points.length - 12}; наведите на точку для подробностей`);
-    }
-    const note = document.createElement("span");
-    const selectedMark = document.createElement("i");
-    selectedMark.className = "pareto-3d-dot is-selected";
-    note.append(selectedMark);
-    addText(note, "span", "", "Выбран алгоритмом");
-    legend.append(note);
-    const shapeNote = document.createElement("span");
-    const diamond = document.createElement("i");
-    diamond.className = "pareto-3d-dot is-diamond";
-    shapeNote.append(diamond);
-    addText(shapeNote, "span", "", "Не все обязательные требования закрыты");
-    legend.append(shapeNote);
-  }
 
+    const addLegendEntry = (className, text) => {
+      const entry = document.createElement("span");
+      const marker = document.createElement("i");
+      marker.className = `pareto-3d-dot ${className}`.trim();
+      entry.append(marker);
+      addText(entry, "span", "", text);
+      legend.append(entry);
+    };
+
+    addLegendEntry("", "Цвет соответствует варианту в списке точек");
+    addLegendEntry("is-diamond", "Не все обязательные требования закрыты");
+    addLegendEntry("is-selected", "Вариант, выбранный алгоритмом");
+  }
   function normalize(value, max) {
     return Math.max(0, Math.min(1, (Number(value) || 0) / Math.max(1e-9, max)));
   }
@@ -364,15 +564,18 @@ if (panel) {
     };
     drawAxes(maxima);
 
-    projected = points.map((point, index) => ({ point, index, ...project(point, maxima) }))
+    projected = points
+      .map((point, index) => ({ point, index, ...project(point, maxima) }))
+      .filter((entry) => visibleIndexes.has(entry.index))
       .sort((left, right) => left.depth - right.depth);
 
     for (const entry of projected) {
       const active = entry.index === selectedIndex;
+      const focused = entry.index === focusedIndex;
       const hovered = entry.index === hoverIndex;
-      const radius = active ? 8.5 : hovered ? 7.5 : 6;
+      const radius = active ? 8.5 : (focused || hovered) ? 7.5 : 6;
       const color = pointColor(entry.index);
-      if (active || hovered) {
+      if (active || focused || hovered) {
         ctx.beginPath();
         ctx.arc(entry.x, entry.y, radius + (active ? 7 : 5), 0, Math.PI * 2);
         ctx.fillStyle = active ? "rgba(184,135,42,.18)" : "rgba(22,50,79,.13)";
@@ -391,8 +594,8 @@ if (panel) {
       }
       ctx.fillStyle = color;
       ctx.fill();
-      ctx.strokeStyle = active ? "#b8872a" : "#ffffff";
-      ctx.lineWidth = active ? 3.2 : hovered ? 2.8 : 1.8;
+      ctx.strokeStyle = active ? "#b8872a" : focused ? "#16324f" : "#ffffff";
+      ctx.lineWidth = active ? 3.2 : (focused || hovered) ? 2.8 : 1.8;
       ctx.stroke();
     }
   }
@@ -411,8 +614,11 @@ if (panel) {
 
   function setPoints(solutions, selectedSolution, error) {
     panel._selectedSolution = selectedSolution ?? null;
+    ensureFilterPanel();
+    filterPanel.hidden = true;
     if (error) {
       points = [];
+      visibleIndexes.clear();
       renderLegend();
       if (tooltip) tooltip.hidden = true;
       canvas.hidden = true;
@@ -434,6 +640,7 @@ if (panel) {
     const maxDays = Math.max(0, ...valid.map((point) => Number(point.total_implementation_days) || 0));
     if (!valid.length) {
       points = [];
+      visibleIndexes.clear();
       renderLegend();
       if (tooltip) tooltip.hidden = true;
       canvas.hidden = true;
@@ -444,6 +651,7 @@ if (panel) {
     }
     if (maxDays <= 0) {
       points = [];
+      visibleIndexes.clear();
       renderLegend();
       if (tooltip) tooltip.hidden = true;
       canvas.hidden = true;
@@ -454,9 +662,14 @@ if (panel) {
     }
 
     points = valid;
+    visibleIndexes = new Set(points.map((_, index) => index));
+    filterSearch.value = "";
+    filterStatus.value = "all";
     selectedIndex = points.findIndex((point) => sameSelection(point, selectedSolution));
     hoverIndex = -1;
     focusedIndex = -1;
+    filterPanel.hidden = false;
+    renderFilterList();
     renderLegend();
     stage.hidden = false;
     canvas.hidden = false;
@@ -538,6 +751,7 @@ if (panel) {
       if (index >= 0) {
         focusedIndex = index;
         hoverIndex = index;
+        renderFilterList();
         const stageRect = stage.getBoundingClientRect();
         showPoint(points[index], index, {
           x: event.clientX - stageRect.left,
