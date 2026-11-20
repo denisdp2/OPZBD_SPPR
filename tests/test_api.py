@@ -26,7 +26,14 @@ def test_evaluate_uses_catalog_coverage_and_cost(client):
         "requirements": ["Q.1", "Q.2"],
         "profile_id": "p",
         "period_months": 6,
-        "candidates": [{"item_id": "tool-1", "capex": 100, "opex_month": 10, "implement_days": 2.5}],
+        "candidates": [
+            {
+                "item_id": "tool-1",
+                "capex": 100,
+                "opex_month": 10,
+                "implement_days": 2.5,
+            }
+        ],
     }
     response = client.post("/api/evaluate", json=scenario)
     assert response.status_code == 200

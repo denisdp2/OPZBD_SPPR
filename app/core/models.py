@@ -147,7 +147,11 @@ class EvaluationResult(_Model):
     covered_optional: int
     total_optional: int
     total_cost: float
-    total_implementation_days: float = Field(0, ge=0, description="Сумма сроков внедрения выбранных позиций, дни")
+    total_implementation_days: float = Field(
+        0,
+        ge=0,
+        description="Сумма сроков внедрения выбранных позиций, дни",
+    )
     covered_by: dict[str, list[str]] = Field(
         default_factory=dict, description="требование -> какие элементы его закрывают"
     )
@@ -162,7 +166,11 @@ class Solution(_Model):
     covered_count: int
     feasible: bool = Field(description="Все обязательные требования закрыты")
     elapsed_ms: float | None = None
-    total_implementation_days: float = Field(0, ge=0, description="Сумма сроков внедрения выбранных позиций, дни")
+    total_implementation_days: float = Field(
+        0,
+        ge=0,
+        description="Сумма сроков внедрения выбранных позиций, дни",
+    )
 
 
 class OptimizeRequest(_Model):

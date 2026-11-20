@@ -69,8 +69,8 @@ from app.importers.registry_download import download_registry_export, download_r
 from app.importers.service import RegistryService
 from app.optimization import UnknownOptimizer, get_optimizer
 from app.optimization import list_optimizers as optimizer_catalog
-from app.optimization.pareto_3d import pareto_front_3d
 from app.optimization.cancel import OptimizationCancelled, bind, reset
+from app.optimization.pareto_3d import pareto_front_3d
 from app.storage.registry import RegistryStore
 from app.storage.registry_export import export_registry_xlsx
 from app.storage.sqlite import SQLiteRepository

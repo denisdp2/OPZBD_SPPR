@@ -69,9 +69,17 @@ def test_registration_and_draft_survive_restart(client):
         "requirements": ["ИАФ.1"],
         "candidates": ["tool-1"],
         "prices": {
-            "tool-1": {"capex": 1250.5, "opex_month": 0},
-            "tool-2": {"capex": "", "opex_month": 75},
-        },
+    "tool-1": {
+        "capex": 1250.5,
+        "opex_month": 0,
+        "implement_days": "",
+    },
+    "tool-2": {
+        "capex": "",
+        "opex_month": 75,
+        "implement_days": "",
+    },
+},
         "algorithm": "test",
         "mode": "max_coverage",
         "budget": "5000",
