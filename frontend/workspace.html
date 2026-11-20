@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/assets/css/admin-theme-v3-workspace.css?v=3" data-admin-theme="workspace-v3">
   <link rel="stylesheet" href="/static/assets/css/pareto-3d.css?v=1">
   <link rel="stylesheet" href="/static/assets/css/implementation-time.css?v=1">
+  <link rel="stylesheet" href="/static/assets/css/algorithm-comparison.css?v=1">
   <script type="module" src="/static/assets/js/components/pareto-3d.js?v=1"></script>
   <script type="module" src="/static/assets/js/pages/workspace-page.js?v=qa-1"></script>
 </head>
@@ -134,6 +135,7 @@
               <label class="control-label label-spaced">Постановка задачи</label><div class="mode-options"><label class="mode-option is-selected" data-mode-card="min_cost"><input type="radio" name="opt-mode" value="min_cost" checked><span class="mode-radio"></span><span><strong>Взвешенное покрытие</strong><small>Закрыть обязательные требования с минимальными затратами.</small></span></label><label class="mode-option" data-mode-card="max_coverage"><input type="radio" name="opt-mode" value="max_coverage"><span class="mode-radio"></span><span><strong>Максимальное покрытие</strong><small>Закрыть как можно больше требований в пределах бюджета.</small></span></label></div>
               <div class="budget-field" id="budget-field" hidden><label class="control-label" for="budget-input">Бюджет на период, ₽</label><input class="text-control" type="number" id="budget-input" min="0" step="1000" value="500000"></div>
               <button type="button" class="button button-secondary full-button" id="stop-optimization" hidden>Остановить расчёт</button><button type="button" class="button button-primary full-button" id="run-optimization">Запустить подбор</button>
+              <button type="button" class="button button-secondary full-button" id="compare-algorithms">Сравнить алгоритмы</button>
             </section>
             <section class="panel solution-panel"><div class="panel-heading"><div><h2>Найденный вариант</h2></div><span class="result-chip" id="solution-chip">Нет расчёта</span></div><div id="solution-empty" class="empty-state"><strong>Результат появится после подбора</strong><p>Выберите алгоритм и постановку задачи, затем запустите расчёт.</p></div><div id="solution-result" hidden><div class="solution-metrics"><div><span>Стоимость</span><strong id="solution-cost">—</strong></div><div><span>Закрыто требований</span><strong id="solution-covered">—</strong></div><div><span>Позиций в варианте</span><strong id="solution-items-count">—</strong></div><div><span>Время работы алгоритма</span><strong id="solution-time">—</strong></div><div><span>Срок внедрения набора</span><strong id="solution-implementation-days">—</strong></div></div><div class="panel-divider"></div><h3 class="subsection-title">Состав найденного варианта</h3><div id="solution-items" class="solution-items"></div><div class="solution-foot" id="solution-foot"></div></div></section>
           </div>
@@ -147,7 +149,21 @@
             <div id="pareto-3d-details" class="pareto-3d-details" aria-live="polite">Запустите подбор, чтобы построить график.</div>
             <div class="pareto-3d-legend"><span><i class="pareto-3d-dot"></i>Обязательные требования закрыты</span><span><i class="pareto-3d-dot is-warning"></i>Есть незакрытые требования</span><span><i class="pareto-3d-dot is-selected"></i>Вариант, выбранный алгоритмом</span></div>
           </article>
-        </section>
+                  <article class="panel algorithm-comparison-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Сравнение алгоритмов</h2>
+                <p class="algorithm-comparison-lead">Один сценарий, одна постановка задачи и одинаковый бюджет для всех алгоритмов.</p>
+              </div>
+              <span class="chart-badge">Сравнение</span>
+            </div>
+            <p id="algorithm-comparison-status" class="algorithm-comparison-status" role="status" aria-live="polite">Сравнение ещё не запускалось.</p>
+            <div id="algorithm-comparison-results">
+              <div class="empty-state"><strong>Результаты появятся здесь</strong><p>Нажмите «Сравнить алгоритмы», чтобы запустить все доступные алгоритмы на текущем сценарии.</p></div>
+            </div>
+            <p class="algorithm-comparison-note">Для минимизации стоимости отставание считается относительно самого дешёвого допустимого решения. Для максимального покрытия — относительно наибольшего покрытия среди допустимых решений. Многокритериальный алгоритм ищет компромисс между целями.</p>
+          </article>
+</section>
 
         <footer class="app-footer"><span>СППР · Модуль принятия решений</span><span id="footer-data-state">Справочники загружаются</span></footer>
       </div>

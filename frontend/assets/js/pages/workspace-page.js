@@ -28,6 +28,8 @@ const state = {
   lastEvaluation: null,
   lastOptimization: null,
   lastPareto: [],
+  lastComparison: [],
+  lastComparisonMode: "min_cost",
   resultSource: "none",
   isCalculating: false,
   initializedOnce: false,
@@ -628,6 +630,93 @@ function renderPareto(solutions, selectedSolution = state.lastOptimization) {
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="График стоимости и числа закрытых требований">${grid}<line x1="${left}" y1="${top}" x2="${left}" y2="${top + plotHeight}" stroke="#ccd4e1"/><line x1="${left}" y1="${top + plotHeight}" x2="${left + plotWidth}" y2="${top + plotHeight}" stroke="#ccd4e1"/>${frontier}${points}${labels}</svg>`;
 }
 
+function renderAlgorithmComparison(
+  rows = state.lastComparison,
+  mode = state.lastComparisonMode,
+  running = false,
+  total = state.optimizers.length,
+) {
+  const status = $("#algorithm-comparison-status");
+  const container = $("#algorithm-comparison-results");
+  if (!status || !container) return;
+
+  if (!rows.length) {
+    status.textContent = "Сравнение ещё не запускалось.";
+    container.innerHTML = '<div class="empty-state"><strong>Результаты появятся здесь</strong><p>Нажмите «Сравнить алгоритмы», чтобы запустить все доступные алгоритмы на текущем сценарии.</p></div>';
+    return;
+  }
+
+  const feasible = rows
+    .filter((row) => row.solution && row.solution.feasible)
+    .map((row) => row.solution);
+  const bestValue = feasible.length
+    ? (mode === "max_coverage"
+      ? Math.max(...feasible.map((solution) => Number(solution.covered_count) || 0))
+      : Math.min(...feasible.map((solution) => Number(solution.cost) || 0)))
+    : null;
+
+  const qualityLabel = (solution) => {
+    if (!solution) return "Не рассчитано";
+    if (!solution.feasible) return "Нет допустимого решения";
+    if (bestValue === null) return "—";
+    if (mode === "max_coverage") {
+      const gap = Math.max(0, bestValue - (Number(solution.covered_count) || 0));
+      return gap === 0 ? "Лучший результат" : `−${number.format(gap)} треб.`;
+    }
+    const difference = Math.max(0, (Number(solution.cost) || 0) - bestValue);
+    if (difference < 0.01) return "Лучший результат";
+    const percent = bestValue > 0 ? ` · +${(difference / bestValue * 100).toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%` : "";
+    return `+${money(difference)}${percent}`;
+  };
+
+  const body = rows.map((row) => {
+    const optimizer = row.optimizer ?? {};
+    const solution = row.solution;
+    const type = optimizer.exact ? "Точный" : "Приближённый";
+    if (!solution) {
+      return `<tr>
+        <td><strong>${escapeHtml(optimizer.title || optimizer.name || "Алгоритм")}</strong><small>${type}</small></td>
+        <td><span class="comparison-state is-error">Ошибка</span><small title="${escapeHtml(row.error || "Неизвестная ошибка")}">${escapeHtml(row.error || "Расчёт не выполнен")}</small></td>
+        <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+      </tr>`;
+    }
+
+    const selectedIds = Array.isArray(solution.selected) ? solution.selected : [];
+    const selectedNames = selectedIds.map((id) => {
+      const item = state.items.find((entry) => entry.id === id);
+      return item?.name || id;
+    });
+    const composition = selectedNames.length
+      ? `<details class="comparison-composition"><summary>Состав (${selectedNames.length})</summary><ul>${selectedNames.map((name) => `<li>${escapeHtml(name)}</li>`).join("")}</ul></details>`
+      : '<small>Пустой набор</small>';
+    const valid = Boolean(solution.feasible);
+
+    return `<tr>
+      <td><strong>${escapeHtml(optimizer.title || optimizer.name || solution.algorithm || "Алгоритм")}</strong><small>${type}</small>${composition}</td>
+      <td><span class="comparison-state ${valid ? "is-success" : "is-warning"}">${valid ? "Допустимое" : "Не все обязательные"}</span></td>
+      <td>${money(solution.cost)}</td>
+      <td>${number.format(Number(solution.covered_count) || 0)} / ${number.format(state.selectedRequirements.size)}</td>
+      <td>${formatImplementationDays(solution.total_implementation_days ?? 0)}</td>
+      <td>${formatElapsed(solution.elapsed_ms)}</td>
+      <td>${qualityLabel(solution)}</td>
+    </tr>`;
+  }).join("");
+
+  status.textContent = running
+    ? `Рассчитано алгоритмов: ${rows.length} из ${total}.`
+    : `Получено результатов: ${rows.length} из ${total}. ${feasible.length ? "Сравнение качества выполнено среди допустимых решений." : "Пока нет допустимых решений, закрывающих все обязательные требования."}`;
+
+  container.innerHTML = `<div class="algorithm-comparison-table-wrap">
+    <table class="algorithm-comparison-table">
+      <thead><tr>
+        <th>Алгоритм</th><th>Результат</th><th>Стоимость</th><th>Покрытие</th>
+        <th>Внедрение</th><th>Время расчёта</th><th>Отставание от лучшего</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+  </div>`;
+}
+
 function renderAll() {
   renderApiState();
   renderProfileOptions();
@@ -644,6 +733,8 @@ function invalidateResults() {
   state.resultSource = "none";
   state.lastOptimization = null;
   state.lastPareto = [];
+  state.lastComparison = [];
+  renderAlgorithmComparison([], state.lastComparisonMode);
   window.dispatchEvent(new CustomEvent("workspace:pareto-3d-updated", { detail: { solutions: [] } }));
   $("#solution-empty").hidden = false;
   $("#solution-result").hidden = true;
@@ -817,6 +908,100 @@ async function runOptimization() {
       : state.usingExamples
         ? "Показан локальный подбор на демонстрационных данных."
         : "API оптимизации пока недоступен: вариант подобран локально по данным сервера.", solutionSource === "server" ? "success" : "info");
+  }
+}
+
+async function runAlgorithmComparison() {
+  if (state.isCalculating) return;
+  if (!state.selectedRequirements.size) {
+    showToast("Сначала выберите требования.", "error");
+    navigateTo("builder");
+    return;
+  }
+  if (!state.candidates.size) {
+    showToast("Добавьте в набор хотя бы одно средство или организационную меру.", "error");
+    navigateTo("builder");
+    return;
+  }
+  if (hasMissingCosts()) {
+    showToast("Заполните стоимость внедрения, эксплуатации и срок внедрения для каждой выбранной позиции. Если параметр не применим, укажите 0.", "error");
+    navigateTo("builder");
+    return;
+  }
+  if (state.usingExamples || state.usingExampleOptimizers) {
+    showToast("Сравнение доступно только при подключении к серверу и получении реального списка алгоритмов.", "error");
+    return;
+  }
+  const algorithms = state.optimizers.filter((optimizer) => optimizer?.name);
+  if (!algorithms.length) {
+    showToast("Сервер не вернул список доступных алгоритмов.", "error");
+    return;
+  }
+
+  const mode = $("input[name='opt-mode']:checked")?.value ?? "min_cost";
+  const budget = mode === "max_coverage" ? Number($("#budget-input").value) : null;
+  if (mode === "max_coverage" && (!Number.isFinite(budget) || budget < 0)) {
+    showToast("Укажите бюджет не меньше нуля.", "error");
+    return;
+  }
+  const commonPayload = {
+    scenario: scenarioFor(),
+    mode,
+    ...(mode === "max_coverage" ? { budget } : {}),
+  };
+
+  const controller = new AbortController();
+  state.optimizationAbort = controller;
+  state.isCalculating = true;
+  state.lastComparison = [];
+  state.lastComparisonMode = mode;
+  const compareButton = $("#compare-algorithms");
+  const optimizeButton = $("#run-optimization");
+  const stopButton = $("#stop-optimization");
+  setLoading(compareButton, true, "Сравниваем…");
+  setLoading(optimizeButton, true, "Подождите…");
+  if (stopButton) stopButton.hidden = false;
+  renderAlgorithmComparison([], mode);
+
+  const rows = [];
+  let stopped = false;
+  try {
+    for (const optimizer of algorithms) {
+      if (controller.signal.aborted) {
+        stopped = true;
+        break;
+      }
+      try {
+        const solution = await workspaceService.optimize(
+          { ...commonPayload, algorithm: optimizer.name },
+          controller.signal,
+        );
+        rows.push({ optimizer, solution, error: null });
+      } catch (error) {
+        if (error?.name === "AbortError" || controller.signal.aborted) {
+          stopped = true;
+          break;
+        }
+        rows.push({ optimizer, solution: null, error: error?.message || "Неизвестная ошибка" });
+      }
+      state.lastComparison = [...rows];
+      renderAlgorithmComparison(rows, mode, true, algorithms.length);
+    }
+    state.lastComparison = [...rows];
+    renderAlgorithmComparison(rows, mode, false, algorithms.length);
+    if (stopped) {
+      showToast(`Сравнение остановлено. Получено результатов: ${rows.length} из ${algorithms.length}.`, "info");
+    } else if (rows.some((row) => row.solution)) {
+      showToast("Сравнение алгоритмов завершено.", "success");
+    } else {
+      showToast("Ни один алгоритм не вернул результат. Проверьте сообщения об ошибках в таблице.", "error");
+    }
+  } finally {
+    if (stopButton) stopButton.hidden = true;
+    state.optimizationAbort = null;
+    state.isCalculating = false;
+    setLoading(compareButton, false);
+    setLoading(optimizeButton, false);
   }
 }
 
@@ -1010,13 +1195,17 @@ function bindEvents() {
   });
   $("#run-evaluation").addEventListener("click", runEvaluation);
   $("#run-optimization").addEventListener("click", runOptimization);
+  $("#compare-algorithms")?.addEventListener("click", runAlgorithmComparison);
   $("#algorithm-select").addEventListener("change", () => {
     updateAlgorithmDescription();
     queueDraftSave();
   });
-  $("#budget-input").addEventListener("input", queueDraftSave);
+  $("#budget-input").addEventListener("input", () => {
+    invalidateResults();
+  });
   $$('input[name="opt-mode"]').forEach((input) => input.addEventListener("change", () => {
     updateModeVisibility();
+    invalidateResults();
     queueDraftSave();
   }));
   $("#stop-optimization")?.addEventListener("click", stopOptimization);

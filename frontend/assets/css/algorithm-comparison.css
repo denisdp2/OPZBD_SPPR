@@ -1,0 +1,107 @@
+/* Сравнение результатов алгоритмов */
+.algorithm-comparison-panel {
+  margin-top: 18px;
+}
+.algorithm-comparison-lead {
+  margin: 6px 0 0;
+  color: #718096;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.algorithm-comparison-status {
+  margin: 0 0 12px;
+  color: #66758a;
+  font-size: 0.9rem;
+}
+.algorithm-comparison-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e3e8ef;
+  border-radius: 12px;
+}
+.algorithm-comparison-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.algorithm-comparison-table th,
+.algorithm-comparison-table td {
+  padding: 12px 13px;
+  border-bottom: 1px solid #e8edf3;
+  text-align: left;
+  vertical-align: top;
+}
+.algorithm-comparison-table th {
+  background: #f6f8fb;
+  color: #66758a;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.algorithm-comparison-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.algorithm-comparison-table td strong,
+.algorithm-comparison-table td small {
+  display: block;
+}
+.algorithm-comparison-table td small {
+  margin-top: 4px;
+  color: #7b8798;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.comparison-state {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.comparison-state.is-success {
+  background: #e7f5ed;
+  color: #176b45;
+}
+.comparison-state.is-warning {
+  background: #fff3dc;
+  color: #946200;
+}
+.comparison-state.is-error {
+  background: #fde9e7;
+  color: #a3332a;
+}
+.comparison-composition {
+  margin-top: 7px;
+  color: #526176;
+  font-size: 0.78rem;
+}
+.comparison-composition summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.comparison-composition ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.comparison-composition li {
+  margin: 3px 0;
+  line-height: 1.35;
+}
+.algorithm-comparison-note {
+  margin: 12px 0 0;
+  color: #7b8798;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+@media (max-width: 720px) {
+  .algorithm-comparison-panel {
+    padding: 16px;
+  }
+  .algorithm-comparison-table th,
+  .algorithm-comparison-table td {
+    padding: 10px;
+  }
+}
