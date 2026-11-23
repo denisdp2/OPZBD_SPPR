@@ -495,12 +495,15 @@ async function loadRegistry() {
     const headers = columns.map(([key, title]) => `<button type="button" class="sort-column" data-sort="${key}"
       aria-label="Сортировать: ${title}" title="Сортировка по возрастанию / убыванию">${title} ${registrySort === key ? (registryDirection === "asc" ? "↑" : "↓") : "↕"}</button>`);
     root.innerHTML = table([...headers, ""],
-      data.items.map(({ item, record: r, price: p, manual_price: manual, source_url: url }) => `<tr>
+      data.items.map(({ item, record: r, price: p, manual_price: manual, source_url: url }) => {
+        const price = r ? (["ok", "free"].includes(p?.status) ? p.value : null) : item.catalog_price;
+        return `<tr>
         <td>${sourceLink(url || r?.docs_url, item.name)}</td><td>${esc(item.covers.join(", "))}</td><td>${esc(item.vendor)}</td>
-        ${downloads ? `<td>${p && ["ok", "free"].includes(p.status) && p.value != null ? esc(p.value.toLocaleString("ru-RU")) : "—"}
-          ${r ? `<button class="registry-edit-price" type="button" title="Изменить цену" data-price-number="${r.reg_number}"
-            data-price-value="${esc(manual ?? p?.value ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button>` : ""}</td>` : ""}
-        <td class="row-actions">${itemActions(item, !downloads)}</td></tr>`));
+        ${downloads ? `<td>${price != null ? esc(price.toLocaleString("ru-RU")) : "—"}
+          <button class="registry-edit-price" type="button" title="Изменить цену" data-price-item="${esc(item.id)}"
+            data-price-value="${esc(manual ?? price ?? "")}" aria-label="Редактировать цену: ${esc(item.name)}"><span aria-hidden="true">✎</span></button></td>` : ""}
+        <td class="row-actions">${itemActions(item, !downloads)}</td></tr>`;
+      }));
     document.getElementById("registry-count").textContent = data.total ? `${registryOffset + 1}–${Math.min(registryOffset + 50, data.total)} из ${data.total}` : "Реестр пока пуст";
     document.getElementById("registry-prev").disabled = registryOffset === 0;
     document.getElementById("registry-next").disabled = registryOffset + 50 >= data.total;
@@ -634,7 +637,7 @@ priceForm.addEventListener("submit", async event => {
   button.disabled = true;
   priceError.textContent = "";
   try {
-    await SZI.request(`/api/admin/registry/${priceForm.dataset.number}/price`, {
+    await SZI.request(`/api/admin/items/${encodeURIComponent(priceForm.dataset.item)}/price`, {
       method: "PUT",
       body: JSON.stringify({value: priceValue.value === "" ? null : priceValue.valueAsNumber}),
     });
@@ -648,9 +651,9 @@ priceForm.addEventListener("submit", async event => {
 });
 
 document.getElementById("registry-table").addEventListener("click", event => {
-  const editPrice = event.target.closest("[data-price-number]");
+  const editPrice = event.target.closest("[data-price-item]");
   if (editPrice) {
-    priceForm.dataset.number = editPrice.dataset.priceNumber;
+    priceForm.dataset.item = editPrice.dataset.priceItem;
     priceValue.value = editPrice.dataset.priceValue;
     priceError.textContent = "";
     priceDialog.showModal();

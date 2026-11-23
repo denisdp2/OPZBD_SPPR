@@ -58,6 +58,7 @@ class Item(_Model):
     fstec_cert_no: str | None = None
     fstec_cert_valid_until: date | None = None
     in_ru_software_registry: bool = False
+    catalog_price: float | None = Field(None, ge=0, allow_inf_nan=False)
 
     # Время внедрения в днях.
     implement_days: float | None = Field(None, ge=0)

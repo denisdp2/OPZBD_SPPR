@@ -257,8 +257,27 @@ def test_registry_import_and_manual_price(client):
     row = client.get(root).json()["items"][0]
     assert row["record"]["name"] == "Запись №1 (без наименования)"
     assert row["manual_price"] == row["price"]["value"] == 0
+    assert client.get("/api/items").json()[0]["catalog_price"] == 0
     assert client.put(f"{root}/1/price", json={"value": None}).status_code == 204
     assert client.get(root).json()["items"][0]["price"] is None
+
+
+def test_catalog_price_for_standalone_tool(client):
+    route = "/api/admin/items/demo-tool"
+    assert client.put(f"{route}/price", json={"value": 12}).status_code == 401
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    tool = {"id": "demo-tool", "kind": "tool", "name": "Standalone"}
+    assert client.put(route, json=tool).status_code == 200
+    assert client.put(f"{route}/price", json={"value": -1}).status_code == 422
+    assert client.put(f"{route}/price", json={"value": 12800.5}).status_code == 204
+    assert client.put(route, json={**tool, "name": "Renamed"}).json()["catalog_price"] == 12800.5
+    assert client.get("/api/items").json()[0]["catalog_price"] == 12800.5
+    assert client.get("/api/admin/export").json()["items"][0]["catalog_price"] == 12800.5
+
+    rows = client.get("/api/admin/tools", params={"sort": "value"}).json()["items"]
+    assert rows[0]["item"]["catalog_price"] == 12800.5
+    assert client.put(f"{route}/price", json={"value": None}).status_code == 204
+    assert client.get("/api/items").json()[0]["catalog_price"] is None
 
 
 def test_official_download_uses_last_successful_copy(client, monkeypatch):

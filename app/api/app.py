@@ -76,7 +76,7 @@ from app.storage.registry_export import export_registry_xlsx
 from app.storage.sqlite import SQLiteRepository
 
 
-class ManualRegistryPrice(BaseModel):
+class CatalogPriceUpdate(BaseModel):
     value: float | None = Field(ge=0, allow_inf_nan=False)
 
 
@@ -184,7 +184,16 @@ def create_app(
 
     @api.get("/items", tags=["catalog"])
     def list_items(kind: ItemKind | None = None) -> list[Item]:
-        return repo.list_items(kind)
+        items = repo.list_items(kind)
+        if kind == "org":
+            return items
+        prices = registry.store.catalog_prices()
+        return [
+            item.model_copy(update={"catalog_price": prices[item.id]})
+            if item.kind == "tool" and item.id in prices
+            else item
+            for item in items
+        ]
 
     @api.get("/profiles", tags=["catalog"])
     def list_profiles() -> list[Profile]:
@@ -312,7 +321,24 @@ def create_app(
         if item_id != body.id:
             raise HTTPException(status_code=422, detail="Код в URL не совпадает с кодом записи")
         repo.upsert_item(body)
-        return body
+        return repo.get_item(item_id)
+
+    @admin.put("/items/{item_id}/price", status_code=204)
+    def update_item_price(item_id: str, body: CatalogPriceUpdate) -> None:
+        item = repo.get_item(item_id)
+        if item.kind != "tool":
+            raise HTTPException(status_code=422, detail="Цена каталога задаётся для средств защиты")
+        number = item_id.removeprefix("ru-software-")
+        if (
+            item_id == f"ru-software-{number}"
+            and number.isascii()
+            and number.isdecimal()
+            and len(number) <= 18
+            and str(int(number)) == number
+            and registry.store.set_manual_price(int(number), body.value)
+        ):
+            return
+        repo.set_item_price(item_id, body.value)
 
     @admin.delete("/items/{item_id}")
     def delete_item(item_id: str) -> dict:
@@ -554,6 +580,7 @@ def create_app(
         def sort_key(row):
             item, record = row["item"], row.get("record") or {}
             price = row.get("price") or {}
+            value = price.get("value") if price.get("status") in {"ok", "free"} else None
             return {
                 "reg_number": record.get("reg_number"),
                 "id": item.id.casefold(),
@@ -561,7 +588,7 @@ def create_app(
                 "covers": ", ".join(item.covers).casefold(),
                 "owner": item.vendor.casefold(),
                 "status": record.get("exclusion_date", ""),
-                "value": price.get("value") if price.get("status") in {"ok", "free"} else None,
+                "value": value if record else item.catalog_price,
                 "source": row.get("source_url") or "",
             }[sort]
 
@@ -657,7 +684,7 @@ def create_app(
         )
 
     @admin.put("/registry/{number}/price", status_code=204)
-    def update_registry_price(number: int, body: ManualRegistryPrice) -> None:
+    def update_registry_price(number: int, body: CatalogPriceUpdate) -> None:
         if not registry.store.set_manual_price(number, body.value):
             raise HTTPException(status_code=404, detail="Запись не найдена")
 

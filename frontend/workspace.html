@@ -9,13 +9,13 @@
 
   <!-- Базовые стили main и дополнительные стили new_feature -->
   <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-6">
-  <link rel="stylesheet" href="/static/assets/css/workspace.css?v=pareto-merge-1">
+  <link rel="stylesheet" href="/static/assets/css/workspace.css?v=catalog-price-1">
   <link rel="stylesheet" href="/static/assets/css/pareto-3d.css?v=merge-1">
   <link rel="stylesheet" href="/static/assets/css/implementation-time.css?v=merge-1">
   <link rel="stylesheet" href="/static/assets/css/algorithm-comparison.css?v=merge-1">
 
   <script type="module" src="/static/assets/js/components/pareto-3d.js?v=merge-1"></script>
-  <script type="module" src="/static/assets/js/pages/workspace-page.js?v=merge-1"></script>
+  <script type="module" src="/static/assets/js/pages/workspace-page.js?v=catalog-price-1"></script>
 </head>
 <body>
   <div class="layout workspace-layout">
@@ -235,7 +235,10 @@
         <article class="card requirements-result-panel">
           <div class="panel-heading">
             <div><h2>Результат по каждому требованию</h2></div>
-            <div class="result-legend"><span><i class="legend-dot dot-green"></i>Закрыто</span><span><i class="legend-dot dot-amber"></i>Не закрыто</span></div>
+            <div class="result-legend">
+              <span><i class="legend-dot dot-green" aria-hidden="true"></i>Закрыто</span>
+              <span><i class="legend-dot dot-amber" aria-hidden="true"></i>Не закрыто</span>
+            </div>
           </div>
           <div id="evaluation-requirements" class="result-requirements"></div>
           <div id="evaluation-empty" class="empty-state"><strong>Нет результата расчёта</strong><p>Сначала задайте сценарий и нажмите «Рассчитать».</p></div>

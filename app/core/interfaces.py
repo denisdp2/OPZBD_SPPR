@@ -67,6 +67,10 @@ class Repository(ABC):
     @abstractmethod
     def delete_item(self, item_id: str) -> None: ...
 
+    def set_item_price(self, item_id: str, value: float | None) -> None:
+        item = self.get_item(item_id)
+        self.upsert_item(item.model_copy(update={"catalog_price": value}))
+
     @abstractmethod
     def replace_item_coverage(
         self, item_id: str, expected: list[str], covers: list[str]
