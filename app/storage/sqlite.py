@@ -66,7 +66,28 @@ class SQLiteRepository(Repository):
         return self._get("items", item_id, Item)
 
     def upsert_item(self, item):
-        self._put("items", item)
+        with closing(sqlite3.connect(self.path)) as con, con:
+            self._write_item(con, item)
+
+    @staticmethod
+    def _write_item(con, item: Item) -> None:
+        con.execute(
+            "INSERT INTO catalog VALUES ('items', ?, ?) "
+            "ON CONFLICT(kind, id) DO UPDATE SET data = CASE WHEN ? THEN excluded.data "
+            "ELSE json_set(excluded.data, '$.catalog_price', "
+            "json_extract(catalog.data, '$.catalog_price')) END",
+            (item.id, item.model_dump_json(), "catalog_price" in item.model_fields_set),
+        )
+
+    def set_item_price(self, item_id: str, value: float | None) -> None:
+        with closing(sqlite3.connect(self.path)) as con, con:
+            updated = con.execute(
+                "UPDATE catalog SET data=json_set(data, '$.catalog_price', ?) "
+                "WHERE kind='items' AND id=?",
+                (value, item_id),
+            )
+            if not updated.rowcount:
+                raise NotFoundError(item_id)
 
     def delete_item(self, item_id):
         self._delete("items", item_id)
@@ -114,10 +135,13 @@ class SQLiteRepository(Repository):
         with closing(sqlite3.connect(self.path)) as con, con:
             for kind in ("requirements", "items", "profiles"):
                 for value in getattr(bundle, kind):
-                    con.execute(
-                        "INSERT OR REPLACE INTO catalog VALUES (?, ?, ?)",
-                        (kind, value.id, value.model_dump_json()),
-                    )
+                    if kind == "items":
+                        self._write_item(con, value)
+                    else:
+                        con.execute(
+                            "INSERT OR REPLACE INTO catalog VALUES (?, ?, ?)",
+                            (kind, value.id, value.model_dump_json()),
+                        )
                     count += 1
         return count
 

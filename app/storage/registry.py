@@ -1,4 +1,4 @@
-"""Метаданные реестра и цены отделены от общего контракта Item."""
+"""Хранилище метаданных и цен Реестра российского ПО."""
 
 import sqlite3
 from contextlib import closing
@@ -9,6 +9,10 @@ from app.core.models import Item
 from app.importers.prices import PriceResult
 from app.importers.registry import RegistryRecord
 from app.importers.urls import canonical_links, source_url
+
+_REGISTRY_PRICE = """COALESCE(manual_price, CASE
+    WHEN json_extract(price, '$.status') IN ('ok', 'free')
+    THEN json_extract(price, '$.value') END)"""
 
 
 class RegistryStore:
@@ -39,6 +43,12 @@ class RegistryStore:
     def delete_record(self, number: int) -> None:
         with closing(sqlite3.connect(self.path)) as con, con:
             con.execute("DELETE FROM registry WHERE reg_number=?", (number,))
+
+    def catalog_prices(self) -> dict[str, float | None]:
+        with closing(sqlite3.connect(self.path)) as con:
+            return dict(
+                con.execute(f"SELECT 'ru-software-' || reg_number, {_REGISTRY_PRICE} FROM registry")
+            )
 
     def upsert(
         self,
@@ -119,14 +129,13 @@ class RegistryStore:
         }
         order = sort_columns[sort]
         direction = "DESC" if descending else "ASC"
-        base = """
+        base = f"""
             WITH tools AS (
                 SELECT c.id, c.data AS item, r.data AS record, r.price, r.manual_price,
                     r.reg_number,
                     COALESCE(json_extract(r.data, '$.exclusion_date'), '') AS excluded,
-                    COALESCE(r.manual_price, CASE
-                        WHEN json_extract(r.price, '$.status') IN ('ok', 'free')
-                        THEN json_extract(r.price, '$.value') END) AS value,
+                    CASE WHEN r.reg_number IS NULL THEN json_extract(c.data, '$.catalog_price')
+                        ELSE {_REGISTRY_PRICE} END AS value,
                     COALESCE(NULLIF(json_extract(r.price, '$.source_url'), ''),
                         json_extract(r.data, '$.cost_url')) AS url
                 FROM catalog AS c

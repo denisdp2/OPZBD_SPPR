@@ -50,7 +50,7 @@
 .catalog-item.is-selected, .mode-option.is-selected { background: #e8eef5; }
 .catalog-item-title { display: block; margin-bottom: 4px; overflow-wrap: anywhere; }
 .kind-tag, .result-chip, .banner-status { color: var(--muted); font-size: 14px; }
-.catalog-details, .cost-editor { margin-top: 8px; }
+.catalog-details, .cost-editor, .catalog-price { margin-top: 8px; }
 .catalog-description { overflow-wrap: anywhere; }
 .item-facts, .covers-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 13px; }
 .item-fact, .cover-chip { padding: 3px 6px; border-radius: 5px; background: var(--paper); overflow-wrap: anywhere; }
@@ -80,6 +80,8 @@
 .evaluation-banner > div { flex: 1 1 240px; overflow-wrap: anywhere; }
 .is-good > div > strong, .is-covered, .result-chip.is-success { color: var(--ok); }
 .is-bad > div > strong, .is-uncovered, .result-chip.is-warning { color: var(--danger); }
+.result-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.result-legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .result-requirements td { overflow-wrap: anywhere; }
 .result-requirements td:first-child { width: 58%; }
 .empty-state, .empty-inline, .chart-placeholder { padding: 12px 0; color: var(--muted); }

@@ -46,6 +46,9 @@ let catalogFilter;
 const currency = new Intl.NumberFormat("ru-RU", {
   style: "currency", currency: "RUB", maximumFractionDigits: 0,
 });
+const catalogCurrency = new Intl.NumberFormat("ru-RU", {
+  style: "currency", currency: "RUB", minimumFractionDigits: 0, maximumFractionDigits: 2,
+});
 const number = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const periodNumber = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
@@ -499,11 +502,17 @@ function renderItem(item, editCosts = false) {
           ${covers || '<span class="cover-chip cover-chip-empty">Нет связанных требований</span>'}
         </div>
       </details>
+      ${item.kind === "tool" && item.catalog_price != null ? `
+        <div class="button-row catalog-price">
+          <span>Цена в каталоге <strong>${catalogCurrency.format(item.catalog_price)}</strong></span>
+          ${editCosts ? `<button class="btn secondary compact-button" type="button"
+            data-use-catalog-price="${escapeHtml(item.id)}">Подставить во внедрение</button>` : ""}
+        </div>` : ""}
       ${editCosts ? `
         <div class="cost-editor">
           <label>Внедрение, ₽
             <span class="cost-input-wrap">
-              <input type="number" min="0" step="1" placeholder="0"
+              <input type="number" min="0" step="any" placeholder="0"
                 value="${costs.capex === null || costs.capex === undefined ? "" : escapeHtml(costs.capex)}"
                 data-cost-item="${escapeHtml(item.id)}" data-cost-field="capex"
                 aria-label="Стоимость внедрения: ${escapeHtml(item.name)}">
@@ -1422,7 +1431,18 @@ function bindEvents() {
       .focus({ preventScroll: true });
   };
   $("#catalog-list").addEventListener("click", toggleItem);
-  $("#selected-list").addEventListener("click", toggleItem);
+  $("#selected-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-use-catalog-price]");
+    if (!button) {
+      toggleItem(event);
+      return;
+    }
+    const item = itemsById.get(button.dataset.useCatalogPrice);
+    const input = button.closest(".catalog-item").querySelector('[data-cost-field="capex"]');
+    input.value = item.catalog_price;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
+  });
   $("#selected-list").addEventListener("input", onCostChange);
   $("#selected-list").addEventListener("change", onCostChange);
 
