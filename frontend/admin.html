@@ -73,10 +73,14 @@
             <label class="btn secondary file-btn">Импорт файла
               <input type="file" accept=".xml,.xls,.xlsx,.json,.db,.sqlite,.sqlite3" data-upload="registry">
             </label>
-            <button class="btn secondary" id="registry-download" type="button">Скачать</button>
+            <button class="btn secondary" id="registry-download" type="button">Скачать и импортировать</button>
           </div>
           <div class="upload-status" data-upload-status="registry" role="status"></div>
           <div id="registry-download-status" role="status"></div>
+          <div id="registry-download-fallback" hidden>
+            <a href="https://reestr.digital.gov.ru/reestr/" target="_blank" rel="noopener noreferrer">Открыть официальный реестр</a>.
+            Скачайте XML или XLS на сайте, затем выберите «Импорт файла».
+          </div>
           <div class="toolbar registry-actions">
             <button class="btn" id="collect-prices" type="button">Получить стоимость</button>
             <button class="btn secondary" id="stop-prices" type="button" disabled>Остановить</button>
@@ -88,10 +92,10 @@
           <button class="btn secondary" type="button" data-coverage-kind="tool">Загрузить соответствия XLSX</button>
         </div>
         <dialog id="registry-download-dialog">
-          <h2>Скачать реестр</h2>
+          <h2>Скачать и импортировать реестр</h2>
           <div class="toolbar">
             <button class="btn secondary" data-registry-export="xml" type="button">Официальный XML</button>
-            <button class="btn secondary" data-registry-export="xls" type="button">Официальный XLS</button>
+            <button class="btn secondary" data-registry-export="xlsx" type="button">Официальный XLSX</button>
             <form method="dialog"><button class="btn secondary">Закрыть</button></form>
           </div>
         </dialog>
@@ -270,6 +274,6 @@
     </main>
   </div>
   <script src="/static/js/api.js"></script>
-  <script src="/static/js/admin.js?v=coverage-review-6"></script>
+  <script src="/static/js/admin.js?v=registry-update-1"></script>
 </body>
 </html>

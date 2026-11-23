@@ -2,8 +2,10 @@
 
 import html
 import json
+import re
 from datetime import datetime
 from io import BytesIO
+from itertools import chain
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -100,12 +102,8 @@ class RegistryImporter(Importer):
         with path.open("rb") as source:
             signature = source.read(8)
         if signature.startswith(b"PK"):
-            with path.open("rb") as source:
-                book = load_workbook(source, read_only=True, data_only=True)
-                try:
-                    return self.parse_rows(book.active.iter_rows(values_only=True))
-                finally:
-                    book.close()
+            records, errors, _ = self.read_xlsx(path)
+            return records, errors
         if path.suffix.lower() == ".xls":
             if signature.startswith(b"\xd0\xcf\x11\xe0"):
                 try:
@@ -133,6 +131,23 @@ class RegistryImporter(Importer):
             )
         raise ValueError("Не удалось прочитать Excel")
 
+    def read_xlsx(self, path: Path) -> tuple[list[RegistryRecord], list[str], str | None]:
+        with path.open("rb") as source:
+            book = load_workbook(source, read_only=True, data_only=True)
+            try:
+                rows = book.active.iter_rows(values_only=True)
+                first_row = next(rows, ())
+                records, errors = self.parse_rows(chain((first_row,), rows))
+            finally:
+                book.close()
+        source_date = None
+        if len(first_row) > 2 and str(first_row[0]).strip() == "Дата:":
+            try:
+                source_date = datetime.strptime(str(first_row[2]).strip(), "%H:%M:%S %d.%m.%Y")
+            except ValueError:
+                pass
+        return records, errors, source_date.date().isoformat() if source_date else None
+
     def parse_rows(self, source, *, xls_cells=False):
         records, errors, seen = [], [], set()
         if xls_cells:
@@ -158,6 +173,8 @@ class RegistryImporter(Importer):
             }
             raw = values.get("reg_number", "")
             if not raw:
+                continue
+            if not values.get("name") and re.match(r"№\s*\d+\s*[-–—]\s*Классификатор\b", raw):
                 continue
             try:
                 # Excel может хранить целые номера в числовых ячейках.
