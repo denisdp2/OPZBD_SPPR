@@ -630,12 +630,12 @@ def create_app(
             raise HTTPException(status_code=502, detail=message) from exc
 
     @admin.post("/registry/download/{format}")
-    def save_official(format: Literal["xml", "xls"]) -> dict:
+    def save_official(format: Literal["xml", "xls", "xlsx"]) -> dict:
         path, cached = save_registry_export(format)
         return {"path": str(path.resolve()), "cached": cached}
 
     @admin.get("/registry/download/{format}")
-    def download_official(format: Literal["xml", "html", "xls"]):
+    def download_official(format: Literal["xml", "html", "xls", "xlsx"]):
         path, cached = save_registry_export(format)
         return FileResponse(
             path, filename=path.name, headers={"X-Registry-Source": "cache"} if cached else {}

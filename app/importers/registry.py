@@ -2,6 +2,7 @@
 
 import html
 import json
+import re
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -158,6 +159,8 @@ class RegistryImporter(Importer):
             }
             raw = values.get("reg_number", "")
             if not raw:
+                continue
+            if not values.get("name") and re.match(r"№\s*\d+\s*[-–—]\s*Классификатор\b", raw):
                 continue
             try:
                 # Excel может хранить целые номера в числовых ячейках.

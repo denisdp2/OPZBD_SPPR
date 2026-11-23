@@ -43,6 +43,7 @@ function showPage(id) {
     clearTimeout(priceTimer);
     const registryPage = document.getElementById("page-tools");
     registryPage.querySelector(".flash")?.remove();
+    document.getElementById("registry-download-fallback").hidden = true;
     registryPage.querySelectorAll('[role="status"]:not(#registry-count)').forEach((status) => {
       status.textContent = "";
     });
@@ -678,19 +679,25 @@ document.getElementById("registry-download").addEventListener("click", () => dow
 const registryExportButtons = document.querySelectorAll("[data-registry-export]");
 registryExportButtons.forEach(control => control.addEventListener("click", async event => {
   const status = document.getElementById("registry-download-status");
+  const fallback = document.getElementById("registry-download-fallback");
   const format = event.currentTarget.dataset.registryExport;
   const visit = registryVisit;
   registryExportButtons.forEach(button => button.disabled = true);
   downloadDialog.close();
+  fallback.hidden = true;
   status.textContent = `Скачивание ${format.toUpperCase()} с сайта реестра…`;
   try {
     const result = await SZI.request(`/api/admin/registry/download/${format}`, {method: "POST"});
     if (visit !== registryVisit) return;
+    fallback.hidden = !result.cached;
     status.textContent = result.cached
       ? `Свежая выгрузка недоступна. Последняя сохранённая копия: ${result.path}`
       : `Файл сохранён: ${result.path}`;
   } catch (error) {
-    if (visit === registryVisit) status.textContent = error.message;
+    if (visit === registryVisit) {
+      status.textContent = error.message;
+      fallback.hidden = false;
+    }
   }
   finally { registryExportButtons.forEach(button => button.disabled = false); }
 }));

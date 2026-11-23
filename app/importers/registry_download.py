@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
+from zipfile import BadZipFile, ZipFile
 
 import httpx
 from bs4 import BeautifulSoup
@@ -9,6 +10,7 @@ from bs4 import BeautifulSoup
 from app.importers.prices import tls_context
 
 REGISTRY_EXPORT_URL = "https://reestr.digital.gov.ru/reestr/?export=registry"
+REGISTRY_XLSX_URL = "https://reestr.digital.gov.ru/reestr/?export=list"
 MAX_EXPORT_BYTES = 250_000_000
 
 
@@ -40,7 +42,9 @@ def download_registry_export(target: Path, format: str = "xml") -> Path:
             headers={"User-Agent": "Mozilla/5.0"},
         ) as client:
             url = REGISTRY_EXPORT_URL
-            if format != "xml":
+            if format == "xlsx":
+                url = REGISTRY_XLSX_URL
+            elif format != "xml":
                 page = client.get("https://reestr.digital.gov.ru/reestr/")
                 page.raise_for_status()
                 url = discover_exports(page.content).get(format)
@@ -64,6 +68,13 @@ def download_registry_export(target: Path, format: str = "xml") -> Path:
                 start.startswith(b"<?xml") or b"<registry" in start
             ):
                 raise ValueError("Вместо XML сайт вернул страницу ошибки или проверки доступа")
+        elif format == "xlsx":
+            try:
+                with ZipFile(target) as archive:
+                    archive.getinfo("[Content_Types].xml")
+                    archive.getinfo("xl/workbook.xml")
+            except (BadZipFile, KeyError) as exc:
+                raise ValueError("Сайт не вернул файл XLSX") from exc
         elif not (
             start.startswith((b"PK", b"\xd0\xcf\x11\xe0"))
             or b"<table" in start.lower()

@@ -3,11 +3,11 @@ import io
 
 import httpx
 import pytest
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from app.importers.prices import PriceResult, classify, collect_price
 from app.importers.registry import RegistryImporter, RegistryRecord
-from app.importers.registry_download import discover_exports
+from app.importers.registry_download import REGISTRY_XLSX_URL, discover_exports
 from app.importers.urls import normalize_urls
 
 
@@ -173,6 +173,32 @@ def test_blocked_official_download_reports_http_status(client, monkeypatch):
     response = client.post("/api/admin/registry/download/xml")
     assert response.status_code == 502
     assert "HTTP 403" in response.json()["detail"]
+
+
+def test_official_xlsx_download_and_import(client, monkeypatch):
+    book = Workbook()
+    book.active.append(["Регистрационный номер", "Наименование ПО"])
+    book.active.append([1, "Проверочная запись"])
+    book.active.append(["№621 - Классификатор, утвержденный приказом"])
+    output = io.BytesIO()
+    book.save(output)
+    book.close()
+    payload = output.getvalue()
+
+    def handler(request):
+        assert request.method == "GET"
+        assert str(request.url) == REGISTRY_XLSX_URL
+        return httpx.Response(200, content=payload)
+
+    http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr("app.importers.registry_download.httpx.Client", lambda **_: http_client)
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    result = client.post("/api/admin/registry/download/xlsx").json()
+    assert not result["cached"] and result["path"].endswith("registry.xlsx")
+    imported = client.post(
+        "/api/admin/import/ru-software", files={"file": ("registry.xlsx", payload)}
+    ).json()
+    assert imported["imported"] == 1 and imported["errors"] == []
 
 
 def test_registry_import_date_survives_restart_and_ignores_failed_import(client):
