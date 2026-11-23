@@ -95,7 +95,7 @@ class Candidate(_Model):
     item_id: str
     capex: float = Field(0, ge=0, description="Стоимость внедрения, руб.")
     opex_month: float = Field(0, ge=0, description="Стоимость эксплуатации в месяц, руб.")
-
+    implement_days: float = Field(0, ge=0, description="Время внедрения в днях")
 
 class Scenario(_Model):
     """Что выбрал пользователь в модуле принятия решений."""
@@ -127,6 +127,9 @@ class Problem(_Model):
     items: list[Item]
     costs: dict[str, float] = Field(description="item_id -> полная стоимость за период")
     period_months: float
+    implementation_days: dict[str, float] = Field(
+        default_factory=dict, description="item_id -> пользовательское время внедрения, дни"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -144,6 +147,11 @@ class EvaluationResult(_Model):
     covered_optional: int
     total_optional: int
     total_cost: float
+    total_implementation_days: float = Field(
+        0,
+        ge=0,
+        description="Сумма сроков внедрения выбранных позиций, дни",
+    )
     covered_by: dict[str, list[str]] = Field(
         default_factory=dict, description="требование -> какие элементы его закрывают"
     )
@@ -158,6 +166,11 @@ class Solution(_Model):
     covered_count: int
     feasible: bool = Field(description="Все обязательные требования закрыты")
     elapsed_ms: float | None = None
+    total_implementation_days: float = Field(
+        0,
+        ge=0,
+        description="Сумма сроков внедрения выбранных позиций, дни",
+    )
 
 
 class OptimizeRequest(_Model):

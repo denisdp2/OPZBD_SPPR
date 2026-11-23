@@ -70,6 +70,7 @@ from app.importers.service import RegistryService
 from app.optimization import UnknownOptimizer, get_optimizer
 from app.optimization import list_optimizers as optimizer_catalog
 from app.optimization.cancel import OptimizationCancelled, bind, reset
+from app.optimization.pareto_3d import pareto_front_3d
 from app.storage.registry import RegistryStore
 from app.storage.registry_export import export_registry_xlsx
 from app.storage.sqlite import SQLiteRepository
@@ -269,6 +270,20 @@ def create_app(
             if app.state.opt_cancel is event:
                 app.state.opt_cancel = None
 
+    @api.post("/pareto/3d", tags=["decision"])
+    async def pareto_3d(req: OptimizeRequest) -> list[Solution]:
+        """Трёхкритериальный фронт: стоимость↓, срок внедрения↓, покрытие↑."""
+        problem = problem_from(req.scenario)
+        event, wrapped = run_cancellable(lambda: pareto_front_3d(problem))
+        try:
+            return await asyncio.to_thread(wrapped)
+        except OptimizationCancelled as exc:
+            raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        finally:
+            if app.state.opt_cancel is event:
+                app.state.opt_cancel = None
     # ------------------------------------------------------------------ #
     #  Администрирование
     # ------------------------------------------------------------------ #
