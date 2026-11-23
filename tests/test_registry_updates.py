@@ -177,6 +177,7 @@ def test_blocked_official_download_reports_http_status(client, monkeypatch):
 
 def test_official_xlsx_download_and_import(client, monkeypatch):
     book = Workbook()
+    book.active.append(["Дата:", None, "00:33:33 23.11.2026"])
     book.active.append(["Регистрационный номер", "Наименование ПО"])
     book.active.append([1, "Проверочная запись"])
     book.active.append(["№621 - Классификатор, утвержденный приказом"])
@@ -190,8 +191,11 @@ def test_official_xlsx_download_and_import(client, monkeypatch):
         assert str(request.url) == REGISTRY_XLSX_URL
         return httpx.Response(200, content=payload)
 
-    http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    monkeypatch.setattr("app.importers.registry_download.httpx.Client", lambda **_: http_client)
+    client_class = httpx.Client
+    monkeypatch.setattr(
+        "app.importers.registry_download.httpx.Client",
+        lambda **_: client_class(transport=httpx.MockTransport(handler)),
+    )
     client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
     result = client.post("/api/admin/registry/download/xlsx").json()
     assert not result["cached"] and result["path"].endswith("registry.xlsx")
@@ -199,6 +203,38 @@ def test_official_xlsx_download_and_import(client, monkeypatch):
         "/api/admin/import/ru-software", files={"file": ("registry.xlsx", payload)}
     ).json()
     assert imported["imported"] == 1 and imported["errors"] == []
+    updated = client.post("/api/admin/registry/update/xlsx")
+    assert updated.status_code == 200
+    assert updated.json()["imported"] == 1
+    assert client.get("/api/admin/tools", params={"q": "ru-software-1"}).json()["total"] == 1
+    assert client.get("/api/admin/registry/import-status").json()["source_date"] == "2026-11-23"
+
+
+def test_official_xml_update_skips_cache_when_source_fails(client, monkeypatch):
+    client.post("/api/auth/login", json={"login": "admin", "password": "admin"})
+    route = "/api/admin/registry/update/xml"
+
+    def download(target):
+        target.write_bytes(
+            b'<xml><registry genDate="2026.11.18"><item>'
+            b'<registrationNumber>1</registrationNumber><name>Official tool</name>'
+            b'</item></registry></xml>'
+        )
+
+    monkeypatch.setattr("app.api.app.download_registry_xml", download)
+    response = client.post(route)
+    assert response.status_code == 200
+    assert response.json()["imported"] == 1
+    assert client.get("/api/admin/registry", params={"q": "Official tool"}).json()["total"] == 1
+    date = client.get("/api/admin/registry/import-status").json()
+    assert date["source_date"] == "2026-11-18"
+
+    def unavailable(target):
+        raise httpx.ConnectError("Unavailable")
+
+    monkeypatch.setattr("app.api.app.download_registry_xml", unavailable)
+    assert client.post(route).status_code == 502
+    assert client.get("/api/admin/registry/import-status").json() == date
 
 
 def test_registry_import_date_survives_restart_and_ignores_failed_import(client):

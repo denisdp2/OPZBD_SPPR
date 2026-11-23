@@ -600,7 +600,7 @@ def create_app(
     def registry_import_status() -> dict[str, str | None]:
         return registry.store.import_status()
 
-    def save_registry_export(format: str) -> tuple[Path, bool]:
+    def save_registry_export(format: str, *, allow_cached: bool = True) -> tuple[Path, bool]:
         cache = paths.data_dir() / "registry-cache" / f"registry.{format}"
         try:
             cache.parent.mkdir(parents=True, exist_ok=True)
@@ -613,7 +613,7 @@ def create_app(
                 target.replace(cache)
             return cache, False
         except (httpx.HTTPError, ValueError, OSError) as exc:
-            if cache.is_file():
+            if allow_cached and cache.is_file():
                 return cache, True
             if "CERTIFICATE_VERIFY_FAILED" in str(exc):
                 message = "Сертификат официального сайта не доверен этой системе."
@@ -628,6 +628,21 @@ def create_app(
                     status_code=500, detail="Не удалось записать официальную выгрузку на диск."
                 ) from exc
             raise HTTPException(status_code=502, detail=message) from exc
+
+    @admin.post("/registry/update/{format}")
+    def update_registry(format: Literal["xml", "xlsx"]) -> ImportReport:
+        path, _ = save_registry_export(format, allow_cached=False)
+        try:
+            report = registry.import_file(path)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:500]) from exc
+        except (OSError, KeyError, BadZipFile, ParseError, sqlite3.DatabaseError) as exc:
+            raise HTTPException(
+                status_code=422, detail="Не удалось импортировать выгрузку реестра"
+            ) from exc
+        if not report.imported:
+            raise HTTPException(status_code=422, detail="В выгрузке нет записей для импорта")
+        return report
 
     @admin.post("/registry/download/{format}")
     def save_official(format: Literal["xml", "xls", "xlsx"]) -> dict:

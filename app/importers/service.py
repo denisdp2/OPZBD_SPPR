@@ -35,6 +35,8 @@ class RegistryService:
             parser = RegistryImporter()
             if suffix == ".xml":
                 records, errors, source_date = parser.read_xml(path)
+            elif suffix == ".xlsx":
+                records, errors, source_date = parser.read_xlsx(path)
             else:
                 records, errors = parser.parse_records(path)
             results = {}
