@@ -1,0 +1,61 @@
+{
+  "requirements": [
+    {"id": "DEMO-01", "group": "Доступ", "title": "Многофакторная аутентификация сотрудников"},
+    {"id": "DEMO-02", "group": "Доступ", "title": "Разграничение прав доступа по ролям"},
+    {"id": "DEMO-03", "group": "Журналирование", "title": "Регистрация событий безопасности"},
+    {"id": "DEMO-04", "group": "Восстановление", "title": "Резервное копирование рабочих документов"},
+    {"id": "DEMO-05", "group": "Данные", "title": "Шифрование рабочих документов"},
+    {"id": "DEMO-06", "group": "Персонал", "title": "Обучение сотрудников правилам безопасности"}
+  ],
+  "items": [
+    {
+      "id": "demo-access",
+      "kind": "tool",
+      "name": "Демо: управление доступом",
+      "covers": ["DEMO-01", "DEMO-02"],
+      "implement_days": 3
+    },
+    {
+      "id": "demo-logging",
+      "kind": "tool",
+      "name": "Демо: журнал событий",
+      "covers": ["DEMO-03"],
+      "implement_days": 2
+    },
+    {
+      "id": "demo-backup",
+      "kind": "tool",
+      "name": "Демо: резервное копирование",
+      "covers": ["DEMO-04"],
+      "implement_days": 2
+    },
+    {
+      "id": "demo-training",
+      "kind": "org",
+      "name": "Демо: обучение сотрудников",
+      "covers": ["DEMO-06"],
+      "implement_days": 1
+    },
+    {
+      "id": "demo-encryption",
+      "kind": "tool",
+      "name": "Демо: шифрование документов",
+      "covers": ["DEMO-05"],
+      "implement_days": 3
+    },
+    {
+      "id": "demo-integrated",
+      "kind": "tool",
+      "name": "Демо: комплексная защита",
+      "covers": ["DEMO-01", "DEMO-02", "DEMO-03", "DEMO-05"],
+      "implement_days": 4
+    }
+  ],
+  "profiles": [
+    {
+      "id": "demo-office",
+      "name": "Демо: офисный портал",
+      "mandatory": ["DEMO-01", "DEMO-02", "DEMO-03"]
+    }
+  ]
+}
