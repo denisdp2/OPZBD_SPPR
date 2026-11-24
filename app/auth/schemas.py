@@ -18,15 +18,18 @@ class DraftPrice(BaseModel):
     opex_month: float | Literal[""] = Field(default="")
     implement_days: float | Literal[""] = Field(default="")
 
+
 class UserDraft(BaseModel):
     profile_id: str = ""
+    mandatory: list[str] | None = None
     period_months: float = Field(default=12, ge=0.1, le=120)
     requirements: list[str] = Field(default_factory=list)
     candidates: list[str] = Field(default_factory=list)
     prices: dict[str, DraftPrice] = Field(default_factory=dict)
     algorithm: str = ""
-    mode: Literal["min_cost", "max_coverage"] = "min_cost"
+    mode: Literal["min_cost", "max_coverage", "compromise"] = "min_cost"
     budget: str = "500000"
+    use_budget: bool = False
 
 
 class AdminProfileUpdate(BaseModel):

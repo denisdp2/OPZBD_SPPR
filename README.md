@@ -51,7 +51,7 @@ python run.py
 
 Описание API — на странице `/docs` запущенной программы.
 
-Проверки: `ruff check .`, `ruff format --check .`, `pytest`.
+Проверки: `ruff check .`, `pytest`.
 
 ## Локальные аккаунты и черновики
 

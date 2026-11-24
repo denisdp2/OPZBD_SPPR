@@ -10,13 +10,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 ItemKind = Literal["tool", "org"]
 """Тип элемента защиты: tool — средство защиты (СЗИ/ПО), org — организационная мера."""
 
-OptimizeMode = Literal["min_cost", "max_coverage"]
+OptimizeMode = Literal["min_cost", "max_coverage", "compromise"]
 """Постановка задачи оптимизации.
 
 min_cost      — взвешенное покрытие (Weighted Set Cover): закрыть обязательные
                 требования с минимальной стоимостью;
 max_coverage  — максимальное покрытие: как можно больше требований в бюджете
                 (обязательные при этом должны быть закрыты).
+compromise    — баланс стоимости и покрытия среди допустимых точек Парето.
 """
 
 
@@ -97,6 +98,7 @@ class Candidate(_Model):
     capex: float = Field(0, ge=0, description="Стоимость внедрения, руб.")
     opex_month: float = Field(0, ge=0, description="Стоимость эксплуатации в месяц, руб.")
     implement_days: float = Field(0, ge=0, description="Время внедрения в днях")
+
 
 class Scenario(_Model):
     """Что выбрал пользователь в модуле принятия решений."""
@@ -187,6 +189,9 @@ class OptimizerInfo(_Model):
     exact: bool = Field(description="True — точный алгоритм, False — приближённый")
     description: str = ""
     supports_pareto: bool = False
+    supported_modes: list[OptimizeMode] = Field(
+        default_factory=lambda: ["min_cost", "max_coverage"]
+    )
 
 
 class ImportReport(_Model):

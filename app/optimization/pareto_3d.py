@@ -15,10 +15,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import isfinite
 
-from app.core.cover import expand_covers
 from app.core.models import Problem, Solution
 from app.core.problem import make_solution
 from app.optimization.cancel import raise_if_stopped
+from app.optimization.encoding import encode
+from app.optimization.search import SearchBudget, components
 
 _EPS = 1e-9
 _MAX_LABELS = 150_000
@@ -43,10 +44,7 @@ def _insert_for_same_coverage(frontier: list[_Label], candidate: _Label) -> bool
     for index, current in enumerate(frontier):
         if index % 1024 == 0:
             raise_if_stopped()
-        if not (
-            candidate.cost <= current.cost + _EPS
-            and candidate.days <= current.days + _EPS
-        ):
+        if not (candidate.cost <= current.cost + _EPS and candidate.days <= current.days + _EPS):
             kept.append(current)
     frontier[:] = kept
     frontier.append(candidate)
@@ -150,82 +148,64 @@ def pareto_front_3d(problem: Problem, *, max_labels: int = _MAX_LABELS) -> list[
     превышении API возвращает понятную ошибку, а не зависает и не выдаёт
     неполный фронт за точный.
     """
-    requirement_ids = tuple(dict.fromkeys(problem.requirements))
-    requirement_index = {requirement_id: bit for bit, requirement_id in enumerate(requirement_ids)}
-    known = set(requirement_ids)
+    instance = encode(problem)
+    limits = SearchBudget()
 
-    candidates: list[tuple[str, float, float, int]] = []
-    free_mask = 0
-    free_days = 0.0
-    for item in problem.items:
-        mask = 0
-        for requirement_id in expand_covers(item, problem.items, known):
-            bit = requirement_index.get(requirement_id)
-            if bit is not None:
-                mask |= 1 << bit
-        if mask == 0:
-            continue
+    def check(count: int) -> None:
+        limits.check(count)
+        if count > max_labels:
+            raise ValueError(f"Превышен лимит {max_labels} меток 3D-фронта. Сократите набор.")
 
-        cost = float(problem.costs.get(item.id, 0.0))
-        days = float(getattr(problem, "implementation_days", {}).get(item.id, 0.0))
-        if not isfinite(cost) or not isfinite(days) or cost < 0 or days < 0:
-            raise ValueError(f"Некорректные стоимость или срок внедрения для позиции «{item.id}»")
-
-        # make_solution автоматически включает бесплатные позиции, закрывающие
-        # хотя бы одно требование. Фиксируем их в каждой альтернативе заранее,
-        # чтобы маска DP и фактические метрики Solution всегда совпадали.
-        if cost <= 1e-12:
-            free_mask |= mask
-            free_days += days
-            continue
-        candidates.append((item.id, cost, days, mask))
-
-    # mask -> локальный недоминируемый набор пар (стоимость, дни).
-    states: dict[int, list[_Label]] = {free_mask: [_Label(0.0, free_days, ())]}
-    for item_id, item_cost, item_days, item_mask in candidates:
-        raise_if_stopped()
-        snapshot = [(mask, tuple(labels)) for mask, labels in states.items()]
-        next_states = {mask: list(labels) for mask, labels in states.items()}
-
-        for covered_mask, labels in snapshot:
-            raise_if_stopped()
-            next_mask = covered_mask | item_mask
-            bucket = next_states.setdefault(next_mask, [])
-            for label_index, label in enumerate(labels):
-                if label_index % 1024 == 0:
-                    raise_if_stopped()
-                new_label = _Label(
-                    cost=label.cost + item_cost,
-                    days=label.days + item_days,
-                    selected=label.selected + (item_id,),
-                )
-                _insert_for_same_coverage(bucket, new_label)
-
-        states = {mask: labels for mask, labels in next_states.items() if labels}
-        label_count = sum(len(labels) for labels in states.values())
-        if label_count > max_labels:
-            raise ValueError(
-                "Трёхкритериальный фронт слишком велик для точного расчёта "
-                f"(превышен лимит {max_labels:,} состояний). "
-                "Сократите число выбранных позиций или используйте обычный 2D-фронт."
-            )
-
-    # make_solution применяет общие правила проекта, включая автоматическое
-    # включение бесплатных мер, если они закрывают требования.
-    solutions: list[Solution] = []
-    seen_solutions: set[tuple[float, float, int, bool]] = set()
-    for labels in states.values():
-        for label in labels:
-            raise_if_stopped()
-            solution = make_solution(problem, list(label.selected), "pareto-3d-dp")
-            key = (
-                round(float(solution.cost), 6),
-                round(float(solution.total_implementation_days), 6),
-                int(solution.covered_count),
-                bool(solution.feasible),
-            )
-            if key not in seen_solutions:
-                seen_solutions.add(key)
-                solutions.append(solution)
-
-    return _global_frontier(solutions)
+    combined: dict[tuple[int, int], list[_Label]] = {(0, 0): [_Label(0.0, 0.0, ())]}
+    for group in components(instance):
+        states: dict[int, list[_Label]] = {0: [_Label(0.0, 0.0, ())]}
+        for item_id, cost, mask in zip(group.item_ids, group.costs, group.masks, strict=True):
+            days = float(problem.implementation_days.get(item_id, 0.0))
+            if not isfinite(cost) or not isfinite(days) or cost < 0 or days < 0:
+                raise ValueError(f"Некорректные стоимость или срок для позиции «{item_id}»")
+            snapshot = [(covered, tuple(labels)) for covered, labels in states.items()]
+            for covered, labels in snapshot:
+                limits.check()
+                bucket = states.setdefault(covered | mask, [])
+                for label in labels:
+                    _insert_for_same_coverage(
+                        bucket,
+                        _Label(label.cost + cost, label.days + days, label.selected + (item_id,)),
+                    )
+            check(sum(map(len, states.values())))
+        merged: dict[tuple[int, int], list[_Label]] = {}
+        for (covered, hits), prefixes in combined.items():
+            for mask, labels in states.items():
+                limits.check()
+                key = (covered + mask.bit_count(), hits + (mask & group.mandatory_mask).bit_count())
+                bucket = merged.setdefault(key, [])
+                for left in prefixes:
+                    for right in labels:
+                        _insert_for_same_coverage(
+                            bucket,
+                            _Label(
+                                left.cost + right.cost,
+                                left.days + right.days,
+                                left.selected + right.selected,
+                            ),
+                        )
+            check(sum(map(len, merged.values())))
+        combined = merged
+    mandatory_count = instance.mandatory_mask.bit_count()
+    known_mandatory = set(problem.mandatory) <= set(instance.requirement_ids)
+    candidates = [
+        Solution(
+            algorithm="pareto-3d-dp",
+            selected=list(label.selected),
+            cost=label.cost,
+            covered_count=covered,
+            feasible=known_mandatory and hits == mandatory_count,
+            total_implementation_days=round(label.days, 1),
+        )
+        for (covered, hits), labels in combined.items()
+        for label in labels
+    ]
+    return [
+        make_solution(problem, row.selected, "pareto-3d-dp", include_free_items=False)
+        for row in _global_frontier(candidates)
+    ]

@@ -14,6 +14,7 @@ const state = {
   candidates: new Map(),
   prices: new Map(),
   profileId: "",
+  mandatoryOverride: null,
   periodMonths: 12,
   activeKind: "all",
   search: "",
@@ -80,7 +81,7 @@ function profile() {
 
 function mandatoryIds() {
   const validIds = new Set(state.requirements.map((entry) => entry.id));
-  return (profile()?.mandatory ?? []).filter((id) => validIds.has(id));
+  return [...(state.mandatoryOverride ?? profile()?.mandatory ?? [])].filter((id) => validIds.has(id));
 }
 
 // Стоимость и срок внедрения относятся к пользовательскому сценарию,
@@ -146,7 +147,7 @@ function totalSelectedCost() {
 function scenarioFor(itemIds = [...state.candidates.keys()]) {
   return {
     profile_id: state.profileId || null,
-    mandatory: null,
+    mandatory: mandatoryIds(),
     period_months: Math.max(0.1, Math.round((Number(state.periodMonths) || 12) * 10) / 10),
     requirements: [...new Set([...state.selectedRequirements, ...mandatoryIds()])],
     candidates: itemIds.map((itemId) => {
@@ -309,6 +310,7 @@ function showToast(message, type = "info") {
 
 function setLoading(button, loading, idleText) {
   if (!button) return;
+  button.classList.toggle("is-calculating", loading);
   if (loading) {
     button.dataset.idleHtml = button.innerHTML;
     button.disabled = true;
@@ -355,7 +357,7 @@ function renderProfileOptions() {
 function renderRequirements() {
   const list = $("#requirements-list");
   if (!list) return;
-  const mandatory = new Set(profile()?.mandatory ?? []);
+  const mandatory = new Set(mandatoryIds());
   const groupSelect = $("#requirement-group-filter");
   const groups = [...new Set(state.requirements.map((req) => req.group || "Без группы"))]
     .sort((a, b) => a.localeCompare(b, "ru"));
@@ -396,13 +398,14 @@ function renderRequirements() {
     const rows = requirements.map((req) => {
       const isMandatory = mandatory.has(req.id);
       const checked = isMandatory || state.selectedRequirements.has(req.id);
-      return `<label class="requirement-choice${isMandatory ? " is-mandatory" : ""}">
-        <input type="checkbox" data-requirement-id="${escapeHtml(req.id)}" ${checked ? "checked" : ""} ${isMandatory ? "disabled" : ""}>
-        <span class="requirement-choice-copy">
-          <strong>${escapeHtml(req.title)}${isMandatory ? ' <span class="mandatory-pill">Обязательное</span>' : ""}</strong>
-          <small>${escapeHtml(req.id)}${req.source ? ` · ${escapeHtml(req.source)}` : ""}</small>
-        </span>
-      </label>`;
+      return `<div class="requirement-choice${isMandatory ? " is-mandatory" : ""}">
+        <label class="requirement-selection">
+          <input type="checkbox" data-requirement-id="${escapeHtml(req.id)}" ${checked ? "checked" : ""} ${isMandatory ? "disabled" : ""}>
+          <span class="requirement-choice-copy"><strong>${escapeHtml(req.title)}</strong>
+            <small>${escapeHtml(req.id)}${req.source ? ` · ${escapeHtml(req.source)}` : ""}</small></span>
+        </label>
+        <label class="requirement-mandatory"><input type="checkbox" data-mandatory-id="${escapeHtml(req.id)}" ${isMandatory ? "checked" : ""} aria-label="Обязательность: ${escapeHtml(req.title)}">Обязательное</label>
+      </div>`;
     }).join("");
     return `<div class="requirement-group">
       <div class="requirement-group-heading"><strong>${escapeHtml(group)}</strong><span>${requirements.length} · обязательных: ${mandatoryCount}</span></div>
@@ -422,6 +425,10 @@ function renderRequirements() {
     button.classList.toggle("is-active", button.dataset.requirementFilter === state.requirementFilter);
   });
 
+  $("#mandatory-edit-status").textContent = state.mandatoryOverride === null
+    ? "Обязательность взята из шаблона. Её можно изменить ниже."
+    : "Обязательность изменена вручную. Исходный профиль сохранён.";
+  $("#reset-mandatory").disabled = state.mandatoryOverride === null;
   const toggle = $("#toggle-requirements");
   if (toggle) {
     const optionalCount = state.requirements.filter((req) => !mandatory.has(req.id)).length;
@@ -724,10 +731,13 @@ function updateBuilderSummary() {
 
 function renderOptimizerOptions() {
   const select = $("#algorithm-select");
-  select.innerHTML = state.optimizers.map((optimizer) => (
+  const previous = select.value;
+  const available = state.optimizers.filter((optimizer) => supportsMode(optimizer, optimizationMode()));
+  select.innerHTML = available.map((optimizer) => (
     `<option value="${escapeHtml(optimizer.name)}">${escapeHtml(optimizer.title)} · ${optimizer.exact ? "точный" : "приближённый"}${state.usingExampleOptimizers ? " · пример" : ""}</option>`
   )).join("");
-  if (state.optimizers.length) select.value = state.optimizers[0].name;
+  select.value = available.some((optimizer) => optimizer.name === previous)
+    ? previous : (available[0]?.name ?? "");
   updateAlgorithmDescription();
 }
 
@@ -737,12 +747,37 @@ function updateAlgorithmDescription() {
     || "Алгоритм будет использован при расчёте на сервере.";
 }
 
+function optimizationMode() {
+  return $("input[name='opt-mode']:checked")?.value ?? "min_cost";
+}
+
+function supportsMode(optimizer, mode) {
+  const modes = optimizer.supported_modes ?? (optimizer.name === "multiobjective"
+    ? ["compromise"] : ["min_cost", "max_coverage"]);
+  return modes.includes(mode);
+}
+
+function optimizationParameters() {
+  const mode = optimizationMode();
+  const limited = mode === "max_coverage" || (mode === "compromise" && $("#compromise-use-budget").checked);
+  const budget = limited ? Number($("#budget-input").value) : null;
+  if (limited && ($("#budget-input").value === "" || !Number.isFinite(budget) || budget < 0)) {
+    showToast("Укажите бюджет не меньше нуля.", "error");
+    return null;
+  }
+  return { mode, budget };
+}
+
 function updateModeVisibility() {
   const mode = $("input[name='opt-mode']:checked")?.value ?? "min_cost";
   $$ ("[data-mode-card]").forEach((card) => {
     card.classList.toggle("is-selected", card.dataset.modeCard === mode);
   });
-  $("#budget-field").hidden = mode !== "max_coverage";
+  $("#budget-field").hidden = mode === "min_cost";
+  $("#compromise-budget-control").hidden = mode !== "compromise";
+  $("#budget-input").disabled = mode === "compromise" && !$("#compromise-use-budget").checked;
+  $("#compare-algorithms").disabled = mode === "compromise";
+  renderOptimizerOptions();
 }
 
 function formatElapsed(elapsedMs) {
@@ -867,6 +902,11 @@ function renderAlgorithmComparison(
   const container = $("#algorithm-comparison-results");
   if (!status || !container) return;
 
+  if (mode === "compromise") {
+    status.textContent = "В режиме компромисса используется многокритериальный алгоритм.";
+    container.textContent = "Для сравнения алгоритмов выберите минимальную стоимость или покрытие в бюджете.";
+    return;
+  }
   if (!rows.length) {
     status.textContent = "Сравнение ещё не запускалось.";
     container.innerHTML = '<div class="empty-state"><strong>Результаты появятся здесь</strong><p>Нажмите «Сравнить алгоритмы», чтобы запустить все доступные алгоритмы на текущем сценарии.</p></div>';
@@ -1043,19 +1083,20 @@ async function runOptimization() {
   }
   if (!requireCandidatePrices()) return;
 
-  const mode = $("input[name='opt-mode']:checked")?.value ?? "min_cost";
-  const budget = mode === "max_coverage" ? Number($("#budget-input").value) : null;
-  if (mode === "max_coverage" && (!Number.isFinite(budget) || budget < 0)) {
-    showToast("Укажите бюджет не меньше нуля.", "error");
-    return;
-  }
+  const parameters = optimizationParameters();
+  if (!parameters) return;
+  const { mode, budget } = parameters;
 
   const payload = {
     scenario: scenarioFor(),
     algorithm: $("#algorithm-select").value,
     mode,
-    ...(mode === "max_coverage" ? { budget } : {}),
+    ...(budget === null ? {} : { budget }),
   };
+  if (mode === "compromise" && state.usingExamples) {
+    showToast("Для поиска компромисса подключитесь к серверу.", "error");
+    return;
+  }
   state.isCalculating = true;
   const button = $("#run-optimization");
   const stopButton = $("#stop-optimization");
@@ -1068,12 +1109,16 @@ async function runOptimization() {
   let solutionSource = "server";
   let paretoSource = "server";
   let stopped = false;
+  let failed = false;
   try {
     if (state.usingExamples) throw new Error("Примерные справочники");
     solution = await workspaceService.optimize(payload, controller.signal);
   } catch (error) {
     if (error?.name === "AbortError") {
       stopped = true;
+    } else if (error?.status >= 400 || mode === "compromise") {
+      failed = true;
+      showToast(error.message || "Расчёт не выполнен.", "error");
     } else {
       solution = localOptimize(payload);
       solutionSource = "example";
@@ -1086,7 +1131,7 @@ async function runOptimization() {
   }
 
   try {
-    if (stopped) return;
+    if (stopped || failed) return;
     let pareto;
     if (paretoSource === "server") {
       try {
@@ -1096,12 +1141,17 @@ async function runOptimization() {
           stopped = true;
           return;
         }
-        pareto = localPareto(payload.scenario);
-        paretoSource = "example";
-        if (!state.problems.includes("Фронт Парето: серверный метод недоступен, построен локальный график")) {
-          state.problems.push("Фронт Парето: серверный метод недоступен, построен локальный график");
+        if (error?.status >= 400) {
+          pareto = [];
+          showToast(error.message || "Фронт не построен.", "error");
+        } else {
+          pareto = localPareto(payload.scenario);
+          paretoSource = "example";
+          if (!state.problems.includes("Фронт Парето: выполнен локальный расчёт")) {
+            state.problems.push("Фронт Парето: выполнен локальный расчёт");
+          }
+          renderApiState();
         }
-        renderApiState();
       }
     } else {
       pareto = localPareto(payload.scenario);
@@ -1136,6 +1186,7 @@ async function runOptimization() {
     state.optimizationAbort = null;
     state.isCalculating = false;
     setLoading(button, false);
+    if (failed) return;
     if (stopped) {
       showToast("Расчёт остановлен.", "info");
       return;
@@ -1154,6 +1205,7 @@ async function runOptimization() {
 
 async function runAlgorithmComparison() {
   if (state.isCalculating) return;
+  if (optimizationMode() === "compromise") return;
   if (!state.selectedRequirements.size) {
     showToast("Сначала выберите требования.", "error");
     navigateTo("builder");
@@ -1170,23 +1222,20 @@ async function runAlgorithmComparison() {
     return;
   }
 
-  const algorithms = state.optimizers.filter((optimizer) => optimizer?.name);
+  const algorithms = state.optimizers.filter((optimizer) => optimizer?.name && supportsMode(optimizer, optimizationMode()));
   if (!algorithms.length) {
     showToast("Сервер не вернул список доступных алгоритмов.", "error");
     return;
   }
 
-  const mode = $("input[name='opt-mode']:checked")?.value ?? "min_cost";
-  const budget = mode === "max_coverage" ? Number($("#budget-input").value) : null;
-  if (mode === "max_coverage" && (!Number.isFinite(budget) || budget < 0)) {
-    showToast("Укажите бюджет не меньше нуля.", "error");
-    return;
-  }
+  const parameters = optimizationParameters();
+  if (!parameters) return;
+  const { mode, budget } = parameters;
 
   const commonPayload = {
     scenario: scenarioFor(),
     mode,
-    ...(mode === "max_coverage" ? { budget } : {}),
+    ...(budget === null ? {} : { budget }),
   };
   const controller = new AbortController();
   state.optimizationAbort = controller;
@@ -1269,6 +1318,7 @@ function queueDraftSave() {
       method: "PUT",
       body: {
         profile_id: state.profileId,
+        mandatory: state.mandatoryOverride === null ? null : mandatoryIds(),
         period_months: state.periodMonths,
         requirements: [...state.selectedRequirements],
         candidates: [...state.candidates.keys()],
@@ -1276,6 +1326,7 @@ function queueDraftSave() {
         algorithm: $("#algorithm-select").value,
         mode: $("input[name='opt-mode']:checked").value,
         budget: $("#budget-input").value,
+        use_budget: $("#compromise-use-budget").checked,
       },
     });
     draftSaveFailed = false;
@@ -1287,6 +1338,7 @@ function queueDraftSave() {
 
 function restoreDraft(draft) {
   state.profileId = draft.profile_id;
+  state.mandatoryOverride = Array.isArray(draft.mandatory) ? new Set(draft.mandatory) : null;
   state.periodMonths = draft.period_months;
   $("#period-input").value = draft.period_months;
   state.selectedRequirements = new Set(draft.requirements);
@@ -1298,6 +1350,7 @@ function restoreDraft(draft) {
   ]));
   $("input[name='opt-mode'][value='" + draft.mode + "']").checked = true;
   $("#budget-input").value = draft.budget;
+  $("#compromise-use-budget").checked = Boolean(draft.use_budget);
   updateModeVisibility();
 }
 
@@ -1354,6 +1407,17 @@ function onCostChange(event) {
   updateBuilderSummary();
 }
 
+function setRequirementMandatory(id, mandatory) {
+  if (!requirementsById.has(id)) return;
+  state.mandatoryOverride = new Set(mandatoryIds());
+  if (mandatory) {
+    state.mandatoryOverride.add(id);
+    state.selectedRequirements.add(id);
+  } else state.mandatoryOverride.delete(id);
+  invalidateResults();
+  renderAll();
+}
+
 function bindEvents() {
   $$('[data-page]').forEach((control) => {
     control.addEventListener("click", () => navigateTo(control.dataset.page));
@@ -1362,6 +1426,7 @@ function bindEvents() {
   $("#profile-select").addEventListener("change", (event) => {
     const oldMandatory = mandatoryIds();
     state.profileId = event.target.value;
+    state.mandatoryOverride = null;
     const newMandatory = new Set(mandatoryIds());
     oldMandatory.forEach((id) => {
       if (!newMandatory.has(id)) state.selectedRequirements.delete(id);
@@ -1391,6 +1456,22 @@ function bindEvents() {
   });
 
   $("#requirements-list").addEventListener("change", onRequirementChange);
+  $("#requirements-list").addEventListener("change", (event) => {
+    const input = event.target.closest("[data-mandatory-id]");
+    if (!input) return;
+    setRequirementMandatory(input.dataset.mandatoryId, input.checked);
+  });
+  $("#reset-mandatory").addEventListener("click", () => {
+    state.mandatoryOverride = null;
+    mandatoryRequirementsAreIncluded();
+    invalidateResults();
+    renderAll();
+  });
+  $("#all-optional").addEventListener("click", () => {
+    state.mandatoryOverride = new Set();
+    invalidateResults();
+    renderAll();
+  });
   let requirementSearchTimer;
   $("#requirement-search").addEventListener("input", (event) => {
     state.requirementSearch = event.target.value;
@@ -1502,6 +1583,10 @@ function bindEvents() {
     queueDraftSave();
   });
   $("#budget-input").addEventListener("input", invalidateResults);
+  $("#compromise-use-budget").addEventListener("change", () => {
+    updateModeVisibility();
+    invalidateResults();
+  });
   $$('input[name="opt-mode"]').forEach((input) => {
     input.addEventListener("change", () => {
       updateModeVisibility();
@@ -1557,6 +1642,9 @@ async function loadPageData(draft = null) {
     ? state.profileId
     : (state.profiles[0]?.id ?? "");
   const validRequirementIds = new Set(state.requirements.map((entry) => entry.id));
+  if (state.mandatoryOverride !== null) state.mandatoryOverride = new Set(
+    [...state.mandatoryOverride].filter((id) => validRequirementIds.has(id)),
+  );
   state.selectedRequirements = new Set([...state.selectedRequirements].filter((id) => validRequirementIds.has(id)));
   if (!state.initializedOnce && !draft) {
     state.selectedRequirements = new Set(mandatoryIds());
@@ -1568,7 +1656,7 @@ async function loadPageData(draft = null) {
 
   state.initializedOnce = true;
   renderOptimizerOptions();
-  if (state.optimizers.some((optimizer) => optimizer.name === previousAlgorithm)) {
+  if (state.optimizers.some((optimizer) => optimizer.name === previousAlgorithm && supportsMode(optimizer, optimizationMode()))) {
     $("#algorithm-select").value = previousAlgorithm;
     updateAlgorithmDescription();
   }

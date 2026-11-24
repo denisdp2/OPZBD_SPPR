@@ -32,6 +32,10 @@
 .requirement-group-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding: 8px; background: #ece7db; font-size: 14px; }
 .requirement-choice { display: flex; align-items: baseline; gap: 8px; padding: 8px; margin: 0; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: normal; }
 .requirement-choice input { flex: none; margin: 0; }
+.requirement-choice { align-items: flex-start; flex-wrap: wrap; }
+.requirement-selection { display: flex; flex: 1 1 240px; gap: 8px; margin: 0; min-width: 0; font-weight: normal; }
+.requirement-mandatory { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; white-space: nowrap; }
+.mandatory-actions { margin-block: 12px; }
 .requirement-choice-copy { display: grid; gap: 3px; overflow-wrap: anywhere; }
 .requirement-choice-copy small, .catalog-description { color: var(--muted); }
 .mandatory-pill { display: inline-block; font-size: 12px; color: var(--muted); font-weight: normal; }
@@ -88,6 +92,7 @@
 .mode-option { display: flex; align-items: start; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
 .mode-option input { flex: none; margin: 3px 0 0; }
 .mode-option small, .chart-placeholder span { display: block; margin-top: 6px; font-weight: normal; }
+.budget-field label[hidden] { display: none; }
 .full-button { margin-top: 16px; }
 .solution-metrics > div { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
 .pareto-panel { margin-top: 16px; }

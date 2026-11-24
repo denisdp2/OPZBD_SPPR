@@ -110,6 +110,8 @@ def _greedy_max_coverage(instance: CoverInstance, budget: float) -> list[int]:
 def greedy_solve(
     instance: CoverInstance, *, mode: str, budget: float | None
 ) -> tuple[list[str], float, int, bool]:
+    if mode not in {"min_cost", "max_coverage"}:
+        raise ValueError("Жадный алгоритм не поддерживает компромиссный режим")
     if mode == "max_coverage":
         if budget is None:
             raise ValueError("Для mode=max_coverage нужен budget")

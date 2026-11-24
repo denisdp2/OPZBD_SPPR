@@ -93,7 +93,9 @@ def test_free_measure_stays_in_the_set():
         period_months=12,
     )
     for name in ("boolean-ilp", "greedy-cover", "branch-bound", "multiobjective"):
-        solution = get_optimizer(name).solve(problem, "min_cost")
+        solution = get_optimizer(name).solve(
+            problem, "compromise" if name == "multiobjective" else "min_cost"
+        )
         assert solution.feasible is True
         assert solution.cost == 1_000
         assert "measure" in solution.selected
@@ -120,7 +122,7 @@ def test_branch_bound_matches_boolean_ilp():
 
 
 def test_multiobjective_picks_compromise_on_demo():
-    solution = get_optimizer("multiobjective").solve(demo_problem(), "min_cost")
+    solution = get_optimizer("multiobjective").solve(demo_problem(), "compromise")
     assert solution.feasible is True
     assert solution.cost == 133_000
     assert solution.covered_count == 6
@@ -128,7 +130,7 @@ def test_multiobjective_picks_compromise_on_demo():
 
 
 def test_multiobjective_respects_budget():
-    solution = get_optimizer("multiobjective").solve(demo_problem(), "max_coverage", budget=50_000)
+    solution = get_optimizer("multiobjective").solve(demo_problem(), "compromise", budget=50_000)
     assert solution.cost <= 50_000
 
 

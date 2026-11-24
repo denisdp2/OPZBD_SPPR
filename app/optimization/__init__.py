@@ -16,6 +16,7 @@ def list_optimizers() -> list[OptimizerInfo]:
             exact=optimizer.exact,
             description=optimizer.description,
             supports_pareto=optimizer.supports_pareto,
+            supported_modes=list(optimizer.supported_modes),
         )
         for optimizer in OPTIMIZERS
     ]

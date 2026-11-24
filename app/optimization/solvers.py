@@ -35,7 +35,7 @@ class BooleanILPOptimizer(Optimizer):
         "Один и тот же 0-1 метод решает обе постановки: взвешенное покрытие "
         "(Weighted Set Cover) — минимальная стоимость обязательных требований, "
         "и максимальное покрытие — как можно больше требований при заданном бюджете. "
-        "Число кандидатов не ограничивается."
+        "Независимые группы покрытия рассчитываются отдельно."
     )
 
     def solve(
@@ -49,14 +49,14 @@ class BooleanILPOptimizer(Optimizer):
     def pareto(self, problem: Problem) -> list[Solution]:
         started = time.perf_counter()
         instance = encode(problem)
-        elapsed = (time.perf_counter() - started) * 1000
         solutions: list[Solution] = []
         for selected, _cost, _covered, _feasible in exact_pareto(instance):
             solution = make_solution(problem, selected, self.name)
             payload = solution.model_dump()
-            payload["elapsed_ms"] = elapsed
+            payload["elapsed_ms"] = 0
             solutions.append(Solution.model_validate(payload))
-        return solutions
+        elapsed = (time.perf_counter() - started) * 1000
+        return [solution.model_copy(update={"elapsed_ms": elapsed}) for solution in solutions]
 
 
 class BranchBoundOptimizer(Optimizer):
@@ -69,7 +69,7 @@ class BranchBoundOptimizer(Optimizer):
     description = (
         "Дискретная оптимизация тех же двух постановок: взвешенное покрытие "
         "и максимальное покрытие. Дерево «брать / не брать» отсекает ветвь, "
-        "если она уже дороже найденного набора. Число кандидатов не ограничивается; "
+        "если она уже дороже найденного набора или нужное покрытие недостижимо; "
         "долгий расчёт можно остановить кнопкой."
     )
 
@@ -86,14 +86,14 @@ class BranchBoundOptimizer(Optimizer):
     def pareto(self, problem: Problem) -> list[Solution]:
         started = time.perf_counter()
         instance = encode(problem)
-        elapsed = (time.perf_counter() - started) * 1000
         solutions: list[Solution] = []
         for selected, _cost, _covered, _feasible in branch_bound_pareto(instance):
             solution = make_solution(problem, selected, self.name)
             payload = solution.model_dump()
-            payload["elapsed_ms"] = elapsed
+            payload["elapsed_ms"] = 0
             solutions.append(Solution.model_validate(payload))
-        return solutions
+        elapsed = (time.perf_counter() - started) * 1000
+        return [solution.model_copy(update={"elapsed_ms": elapsed}) for solution in solutions]
 
 
 class GreedyCoverOptimizer(Optimizer):
@@ -121,23 +121,24 @@ class GreedyCoverOptimizer(Optimizer):
     def pareto(self, problem: Problem) -> list[Solution]:
         started = time.perf_counter()
         instance = encode(problem)
-        elapsed = (time.perf_counter() - started) * 1000
         solutions: list[Solution] = []
         for selected, _cost, _covered, _feasible in greedy_pareto(instance):
             solution = make_solution(problem, selected, self.name)
             payload = solution.model_dump()
-            payload["elapsed_ms"] = elapsed
+            payload["elapsed_ms"] = 0
             solutions.append(Solution.model_validate(payload))
-        return solutions
+        elapsed = (time.perf_counter() - started) * 1000
+        return [solution.model_copy(update={"elapsed_ms": elapsed}) for solution in solutions]
 
 
 class MultiObjectiveOptimizer(Optimizer):
     """Компромисс между стоимостью и покрытием на точном Парето-фронте."""
 
     name = "multiobjective"
-    title = "Многокритериальная оптимизация"
+    title = "Компромисс между стоимостью и покрытием"
     exact = True
     supports_pareto = True
+    supported_modes = ("compromise",)
     description = (
         "Две локальные цели: минимальная стоимость и максимальное покрытие. "
         "Среди точек Парето-фронта берётся набор, ближайший к идеальной точке "
@@ -146,27 +147,26 @@ class MultiObjectiveOptimizer(Optimizer):
     )
 
     def solve(
-        self, problem: Problem, mode: OptimizeMode = "min_cost", budget: float | None = None
+        self, problem: Problem, mode: OptimizeMode = "compromise", budget: float | None = None
     ) -> Solution:
         started = time.perf_counter()
-        if mode == "max_coverage" and budget is None:
-            raise ValueError("Для mode=max_coverage нужен budget")
+        if mode != "compromise":
+            raise ValueError("Многокритериальный алгоритм доступен в режиме «Компромисс»")
         instance = encode(problem)
-        limit = budget if mode == "max_coverage" else None
-        selected, _cost, _covered, _feasible = compromise(instance, budget=limit)
+        selected, _cost, _covered, _feasible = compromise(instance, budget=budget)
         return _timed_solution(problem, selected, self.name, started)
 
     def pareto(self, problem: Problem) -> list[Solution]:
         started = time.perf_counter()
         instance = encode(problem)
-        elapsed = (time.perf_counter() - started) * 1000
         solutions: list[Solution] = []
         for selected, _cost, _covered, _feasible in pareto_front(instance):
             solution = make_solution(problem, selected, self.name)
             payload = solution.model_dump()
-            payload["elapsed_ms"] = elapsed
+            payload["elapsed_ms"] = 0
             solutions.append(Solution.model_validate(payload))
-        return solutions
+        elapsed = (time.perf_counter() - started) * 1000
+        return [solution.model_copy(update={"elapsed_ms": elapsed}) for solution in solutions]
 
 
 OPTIMIZERS: tuple[Optimizer, ...] = (

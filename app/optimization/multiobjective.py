@@ -48,7 +48,9 @@ def compromise(
     points = exact_pareto(instance)
     if budget is not None:
         affordable = [point for point in points if point[1] <= budget + 1e-12]
-        points = affordable or points
+        points = affordable
+    if not points:
+        return [], 0.0, 0, instance.mandatory_mask == 0
     feasible = [point for point in points if point[3]]
     return _ideal_distance(feasible or points)
 

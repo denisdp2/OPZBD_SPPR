@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from app.optimization.cancel import raise_if_stopped
+from dataclasses import replace
+
 from app.optimization.encoding import INF, CoverInstance
+from app.optimization.search import Choice, SearchBudget, combine, components, frontier, pick
 
 Point = tuple[list[str], float, int, bool]
 
@@ -68,9 +70,22 @@ def _add_point(frontier: list[Point], point: Point) -> None:
 def branch_bound_solve(
     instance: CoverInstance, *, mode: str, budget: float | None
 ) -> tuple[list[str], float, int, bool]:
+    if mode not in {"min_cost", "max_coverage"}:
+        raise ValueError("Выберите минимальную стоимость или покрытие в бюджете")
     if mode == "max_coverage" and budget is None:
         raise ValueError("Для mode=max_coverage нужен budget")
 
+    parts = components(instance, cost_only=True)
+    if not parts:
+        return [], 0.0, 0, instance.mandatory_mask == 0
+    if len(parts) > 1:
+        limits = SearchBudget()
+        options = [_component_choices(part, limits) for part in parts]
+        return pick(instance, combine(instance, options, limits), mode, budget)
+    if len(parts) == 1:
+        instance = replace(parts[0], mandatory_mask=instance.mandatory_mask)
+    if instance.n > 700:
+        raise ValueError("Для этого набора используйте динамическое программирование")
     order = sorted(
         range(instance.n),
         key=lambda j: (
@@ -83,6 +98,8 @@ def branch_bound_solve(
     for pos in range(instance.n - 1, -1, -1):
         suffix_union[pos] = suffix_union[pos + 1] | instance.masks[order[pos]]
 
+    limits = SearchBudget()
+    memo: dict[tuple[int, int], float] = {}
     best_chosen: list[int] = []
     best_cost = INF
     best_covered = -1
@@ -113,7 +130,19 @@ def branch_bound_solve(
             effort = (list(chosen), cost, covered, hits)
 
     def dfs(pos: int, chosen: list[int], cost: float, mask: int) -> None:
-        raise_if_stopped()
+        limits.check(len(memo))
+        key = (pos, mask)
+        previous = memo.get(key)
+        if previous is not None and previous <= cost:
+            return
+        memo[key] = cost
+        possible = mask | suffix_union[pos]
+        if found and possible & instance.mandatory_mask != instance.mandatory_mask:
+            return
+        if not found and effort is not None:
+            hits = (possible & instance.mandatory_mask).bit_count()
+            if hits < effort[3] or (hits == effort[3] and possible.bit_count() < effort[2]):
+                return
         if budget is not None and cost > budget + 1e-12:
             return
         if mode == "min_cost" and found:
@@ -139,27 +168,95 @@ def branch_bound_solve(
     return selected, cost, covered, False
 
 
-def branch_bound_pareto(instance: CoverInstance) -> list[Point]:
-    frontier: list[Point] = []
-
-    def dfs(pos: int, chosen: list[int], cost: float, mask: int) -> None:
-        raise_if_stopped()
+def _component_choices(instance: CoverInstance, limits: SearchBudget) -> list[Choice]:
+    rows = {0: Choice(0, 0.0, ())}
+    memo: dict[tuple[int, int], float] = {}
+    stack = [(0, Choice(0, 0.0, ()))]
+    while stack:
+        pos, row = stack.pop()
+        limits.check(len(memo))
+        key = (pos, row.mask)
+        if key in memo and memo[key] <= row.cost:
+            continue
+        memo[key] = row.cost
+        previous = rows.get(row.mask)
+        if previous is None or row.cost < previous.cost:
+            rows[row.mask] = row
         if pos == instance.n:
-            _add_point(
-                frontier,
-                (
-                    [instance.item_ids[j] for j in chosen],
-                    cost,
-                    mask.bit_count(),
-                    (mask & instance.mandatory_mask) == instance.mandatory_mask,
+            continue
+        stack.append((pos + 1, row))
+        stack.append(
+            (
+                pos + 1,
+                Choice(
+                    row.mask | instance.masks[pos],
+                    row.cost + instance.costs[pos],
+                    row.selected + (instance.item_ids[pos],),
                 ),
             )
+        )
+    return list(rows.values())
+
+
+def _component_pareto(instance: CoverInstance, limits: SearchBudget) -> list[Choice]:
+    if instance.n > 700:
+        return _component_choices(instance, limits)
+    order = sorted(
+        range(instance.n),
+        key=lambda j: (instance.costs[j] / max(instance.masks[j].bit_count(), 1), j),
+    )
+    suffix = [0] * (instance.n + 1)
+    for pos in range(instance.n - 1, -1, -1):
+        suffix[pos] = suffix[pos + 1] | instance.masks[order[pos]]
+    points: list[Point] = []
+    memo: dict[tuple[int, int], float] = {}
+
+    def dfs(pos: int, selected: list[str], cost: float, mask: int) -> None:
+        limits.check(len(memo))
+        key = (pos, mask)
+        previous = memo.get(key)
+        if previous is not None and previous <= cost:
             return
-        chosen.append(pos)
-        dfs(pos + 1, chosen, cost + instance.costs[pos], mask | instance.masks[pos])
-        chosen.pop()
-        dfs(pos + 1, chosen, cost, mask)
+        memo[key] = cost
+        possible = mask | suffix[pos]
+        upper: Point = (
+            [],
+            cost,
+            possible.bit_count(),
+            possible & instance.mandatory_mask == instance.mandatory_mask,
+        )
+        for point in points:
+            if _dominates(point, upper) or point[1:] == upper[1:]:
+                return
+        _add_point(
+            points,
+            (
+                list(selected),
+                cost,
+                mask.bit_count(),
+                mask & instance.mandatory_mask == instance.mandatory_mask,
+            ),
+        )
+        if pos == instance.n:
+            return
+        j = order[pos]
+        selected.append(instance.item_ids[j])
+        dfs(pos + 1, selected, cost + instance.costs[j], mask | instance.masks[j])
+        selected.pop()
+        dfs(pos + 1, selected, cost, mask)
 
     dfs(0, [], 0.0, 0)
-    frontier.sort(key=lambda row: (row[1], -row[2], not row[3]))
-    return frontier
+    masks = dict(zip(instance.item_ids, instance.masks, strict=True))
+    rows = []
+    for selected, cost, _, _ in points:
+        mask = 0
+        for item_id in selected:
+            mask |= masks[item_id]
+        rows.append(Choice(mask, cost, tuple(selected)))
+    return rows
+
+
+def branch_bound_pareto(instance: CoverInstance) -> list[Point]:
+    limits = SearchBudget()
+    groups = [_component_pareto(group, limits) for group in components(instance, cost_only=True)]
+    return frontier(instance, combine(instance, groups, limits))

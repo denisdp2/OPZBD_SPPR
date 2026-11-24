@@ -149,6 +149,7 @@ class Optimizer(ABC):
 
     description: ClassVar[str] = ""
     supports_pareto: ClassVar[bool] = False
+    supported_modes: ClassVar[tuple[OptimizeMode, ...]] = ("min_cost", "max_coverage")
 
     @abstractmethod
     def solve(

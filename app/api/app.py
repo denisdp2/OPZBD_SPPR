@@ -252,6 +252,10 @@ def create_app(
             )
         problem = problem_from(req.scenario)
         optimizer = optimizer_from(req.algorithm)
+        if req.mode not in optimizer.supported_modes:
+            raise HTTPException(
+                status_code=422, detail="Алгоритм не поддерживает выбранную постановку"
+            )
         event, wrapped = run_cancellable(lambda: optimizer.solve(problem, req.mode, req.budget))
         try:
             return await asyncio.to_thread(wrapped)
@@ -275,6 +279,8 @@ def create_app(
             raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
         except NotImplementedError as exc:
             raise HTTPException(status_code=400, detail="Алгоритм не строит Парето-фронт") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         finally:
             if app.state.opt_cancel is event:
                 app.state.opt_cancel = None
@@ -293,6 +299,7 @@ def create_app(
         finally:
             if app.state.opt_cancel is event:
                 app.state.opt_cancel = None
+
     # ------------------------------------------------------------------ #
     #  Администрирование
     # ------------------------------------------------------------------ #

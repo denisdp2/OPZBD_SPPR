@@ -92,7 +92,7 @@ def test_registration_and_draft_survive_restart(client):
         assert restarted.get(path).status_code == 403
         assert restarted.put(path, json=draft).status_code == 403
         assert restarted.post("/api/auth/login", json=credentials).status_code == 200
-        assert restarted.get(path).json() == draft
+        assert restarted.get(path).json() == {**draft, "mandatory": None, "use_budget": False}
 
 
 def test_admin_profile_updates_login_and_revokes_sessions_on_password_change(client):

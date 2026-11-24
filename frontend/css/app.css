@@ -265,7 +265,8 @@ th { background: #ece7db; font-size: 12px; letter-spacing: 0.04em; text-transfor
 #registry-table td { overflow-wrap: anywhere; }
 #registry-table td:nth-child(4) { white-space: nowrap; }
 #registry-table[aria-busy="true"] { opacity: .65; }
-button:disabled { cursor: wait; opacity: .55; }
+button:disabled { cursor: default; opacity: .55; }
+button.is-calculating { cursor: wait; }
 
 .main { min-width: 0; }
 

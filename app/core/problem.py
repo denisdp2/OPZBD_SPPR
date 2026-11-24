@@ -73,7 +73,9 @@ def build_problem(scenario: Scenario, repo: Repository) -> Problem:
     )
 
 
-def make_solution(problem: Problem, selected: list[str], algorithm: str) -> Solution:
+def make_solution(
+    problem: Problem, selected: list[str], algorithm: str, *, include_free_items: bool = True
+) -> Solution:
     """Посчитать стоимость и покрытие набора."""
     by_id = {item.id: item for item in problem.items}
     known = set(problem.requirements)
@@ -95,18 +97,21 @@ def make_solution(problem: Problem, selected: list[str], algorithm: str) -> Solu
         for req_id in expand_covers(item, problem.items, known):
             if req_id in known:
                 covered.add(req_id)
-    for item in problem.items:
-        if item.id in seen:
-            continue
-        if float(problem.costs.get(item.id, 0.0)) > 1e-12:
-            continue
-        extra = [req_id for req_id in expand_covers(item, problem.items, known) if req_id in known]
-        if not extra:
-            continue
-        seen.add(item.id)
-        chosen.append(item.id)
-        implementation_days += float(problem.implementation_days.get(item.id, 0.0))
-        covered.update(extra)
+    if include_free_items:
+        for item in problem.items:
+            if item.id in seen:
+                continue
+            if float(problem.costs.get(item.id, 0.0)) > 1e-12:
+                continue
+            extra = [
+                req_id for req_id in expand_covers(item, problem.items, known) if req_id in known
+            ]
+            if not extra:
+                continue
+            seen.add(item.id)
+            chosen.append(item.id)
+            implementation_days += float(problem.implementation_days.get(item.id, 0.0))
+            covered.update(extra)
     return Solution(
         algorithm=algorithm,
         selected=chosen,

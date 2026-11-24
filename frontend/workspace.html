@@ -8,14 +8,14 @@
   <title>Сценарий и состав — СППР</title>
 
   <!-- Базовые стили main и дополнительные стили new_feature -->
-  <link rel="stylesheet" href="/static/css/app.css?v=coverage-review-6">
-  <link rel="stylesheet" href="/static/assets/css/workspace.css?v=catalog-price-1">
+  <link rel="stylesheet" href="/static/css/app.css?v=calculation-cursor-1">
+  <link rel="stylesheet" href="/static/assets/css/workspace.css?v=manual-objectives-1">
   <link rel="stylesheet" href="/static/assets/css/pareto-3d.css?v=merge-1">
   <link rel="stylesheet" href="/static/assets/css/implementation-time.css?v=merge-1">
   <link rel="stylesheet" href="/static/assets/css/algorithm-comparison.css?v=merge-1">
 
   <script type="module" src="/static/assets/js/components/pareto-3d.js?v=merge-1"></script>
-  <script type="module" src="/static/assets/js/pages/workspace-page.js?v=catalog-price-1"></script>
+  <script type="module" src="/static/assets/js/pages/workspace-page.js?v=calculation-cursor-1"></script>
 </head>
 <body>
   <div class="layout workspace-layout">
@@ -125,8 +125,13 @@
         <div class="builder-layout">
           <section class="card scenario-panel" data-builder-panel="scenario">
             <div class="panel-heading"><div><h2>Параметры сценария</h2></div></div>
-            <label class="control-label" for="profile-select">Профиль обязательности</label>
+            <label class="control-label" for="profile-select">Готовый шаблон обязательности</label>
             <select id="profile-select" class="select-control"></select>
+            <p class="control-help" id="mandatory-edit-status"></p>
+            <div class="toolbar mandatory-actions">
+              <button class="btn secondary compact-button" type="button" id="reset-mandatory">Вернуть шаблон</button>
+              <button class="btn secondary compact-button" type="button" id="all-optional">Все опциональные</button>
+            </div>
             <details class="profile-details"><summary>О профиле</summary><p class="control-help" id="profile-description"></p></details>
 
             <div class="scenario-period">
@@ -268,7 +273,14 @@
                 <span><strong>Максимальное покрытие</strong><small>Закрыть как можно больше требований в пределах бюджета.</small></span>
               </label>
             </div>
+            <div class="mode-options">
+              <label class="mode-option" data-mode-card="compromise">
+                <input type="radio" name="opt-mode" value="compromise">
+                <span><strong>Компромисс между стоимостью и покрытием</strong><small>Выбрать сбалансированный вариант фронта Парето, закрывающий обязательные требования.</small></span>
+              </label>
+            </div>
             <div class="budget-field" id="budget-field" hidden>
+              <label id="compromise-budget-control" hidden><input id="compromise-use-budget" type="checkbox"> Ограничить бюджет компромиссного решения</label>
               <label class="control-label" for="budget-input">Бюджет на период, ₽</label>
               <input class="text-control" type="number" id="budget-input" min="0" step="1000" value="500000">
             </div>
