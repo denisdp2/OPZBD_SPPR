@@ -15,28 +15,26 @@ from app.optimization.multiobjective import compromise, pareto_front
 
 
 def _timed_solution(
-    problem: Problem, selected: list[str], algorithm: str, started: float
+    problem: Problem,
+    selected: list[str],
+    algorithm: str,
+    started: float,
+    *,
+    include_free_items: bool = True,
 ) -> Solution:
-    solution = make_solution(problem, selected, algorithm)
+    solution = make_solution(problem, selected, algorithm, include_free_items=include_free_items)
     payload = solution.model_dump()
     payload["elapsed_ms"] = (time.perf_counter() - started) * 1000
     return Solution.model_validate(payload)
 
 
 class BooleanILPOptimizer(Optimizer):
-    """Точный 0-1 ILP для покрытия требований средствами и мерами."""
 
     name = "boolean-ilp"
-    title = "Булево программирование (точный)"
+    title = "Булево программирование"
     exact = True
     supports_pareto = True
-    description = (
-        "Целочисленная 0-1 модель: переменная «брать / не брать» для каждого средства. "
-        "Один и тот же 0-1 метод решает обе постановки: взвешенное покрытие "
-        "(Weighted Set Cover) — минимальная стоимость обязательных требований, "
-        "и максимальное покрытие — как можно больше требований при заданном бюджете. "
-        "Независимые группы покрытия рассчитываются отдельно."
-    )
+    description = ""
 
     def solve(
         self, problem: Problem, mode: OptimizeMode = "min_cost", budget: float | None = None
@@ -60,18 +58,13 @@ class BooleanILPOptimizer(Optimizer):
 
 
 class BranchBoundOptimizer(Optimizer):
-    """Точный дискретный поиск по переменным «брать / не брать»."""
+    """ дискретный поиск по переменным «брать / не брать»."""
 
     name = "branch-bound"
-    title = "Ветви и границы (точный)"
+    title = "Ветви и границы"
     exact = True
     supports_pareto = True
-    description = (
-        "Дискретная оптимизация тех же двух постановок: взвешенное покрытие "
-        "и максимальное покрытие. Дерево «брать / не брать» отсекает ветвь, "
-        "если она уже дороже найденного набора или нужное покрытие недостижимо; "
-        "долгий расчёт можно остановить кнопкой."
-    )
+    description = ""
 
     def solve(
         self, problem: Problem, mode: OptimizeMode = "min_cost", budget: float | None = None
@@ -100,15 +93,10 @@ class GreedyCoverOptimizer(Optimizer):
     """Комбинаторная эвристика покрытия множества (приближённый алгоритм)."""
 
     name = "greedy-cover"
-    title = "Жадное покрытие (приближённый)"
+    title = "Жадное покрытие"
     exact = False
     supports_pareto = True
-    description = (
-        "Комбинаторное приближение взвешенного покрытия: на каждом шаге берётся "
-        "средство с лучшим отношением «новые обязательные требования / стоимость», "
-        "затем убираются лишние позиции. В режиме максимального покрытия остаток "
-        "бюджета тратится на ещё не закрытые требования."
-    )
+    description = ""
 
     def solve(
         self, problem: Problem, mode: OptimizeMode = "min_cost", budget: float | None = None
@@ -132,19 +120,14 @@ class GreedyCoverOptimizer(Optimizer):
 
 
 class MultiObjectiveOptimizer(Optimizer):
-    """Компромисс между стоимостью и покрытием на точном Парето-фронте."""
+    """Компромисс по стоимости, покрытию и сроку внедрения."""
 
     name = "multiobjective"
-    title = "Компромисс между стоимостью и покрытием"
+    title = "Компромисс по стоимости, покрытию и сроку"
     exact = True
     supports_pareto = True
     supported_modes = ("compromise",)
-    description = (
-        "Две локальные цели: минимальная стоимость и максимальное покрытие. "
-        "Среди точек Парето-фронта берётся набор, ближайший к идеальной точке "
-        "по евклидову расстоянию нормированных отклонений. "
-        "Если задан бюджет, рассматриваются только наборы не дороже него."
-    )
+    description = ""
 
     def solve(
         self, problem: Problem, mode: OptimizeMode = "compromise", budget: float | None = None
@@ -152,9 +135,8 @@ class MultiObjectiveOptimizer(Optimizer):
         started = time.perf_counter()
         if mode != "compromise":
             raise ValueError("Многокритериальный алгоритм доступен в режиме «Компромисс»")
-        instance = encode(problem)
-        selected, _cost, _covered, _feasible = compromise(instance, budget=budget)
-        return _timed_solution(problem, selected, self.name, started)
+        selected = compromise(problem, budget=budget)
+        return _timed_solution(problem, selected, self.name, started, include_free_items=False)
 
     def pareto(self, problem: Problem) -> list[Solution]:
         started = time.perf_counter()

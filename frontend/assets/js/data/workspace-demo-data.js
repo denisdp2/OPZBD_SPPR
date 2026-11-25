@@ -66,6 +66,6 @@ export const demoProfiles = [
 ];
 
 export const demoOptimizers = [
-  { name: "demo-exact", title: "Точный алгоритм (пример)", exact: true, description: "Название демонстрационное. Список реальных алгоритмов должен прийти из API.", supports_pareto: true },
-  { name: "demo-heuristic", title: "Приближённый алгоритм (пример)", exact: false, description: "Название демонстрационное. Конкретный алгоритм выбирается после реализации модуля оптимизации.", supports_pareto: true },
+  { name: "demo-exact", title: "Булево программирование", exact: true, description: "", supports_pareto: true },
+  { name: "demo-heuristic", title: "Жадное покрытие", exact: false, description: "", supports_pareto: true },
 ];

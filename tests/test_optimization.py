@@ -129,6 +129,25 @@ def test_multiobjective_picks_compromise_on_demo():
     assert "backup-system" in solution.selected
 
 
+def test_multiobjective_prefers_shorter_implementation():
+    problem = Problem(
+        requirements=["R1", "R2", "R3"],
+        mandatory=["R1"],
+        period_months=1,
+        items=[
+            Item(id="A", kind="tool", name="A", covers=["R1", "R2"]),
+            Item(id="B", kind="tool", name="B", covers=["R1", "R2", "R3"]),
+            Item(id="C", kind="tool", name="C", covers=["R1", "R2", "R3"]),
+        ],
+        costs={"A": 10, "B": 40, "C": 100},
+        implementation_days={"A": 1, "B": 100, "C": 5},
+    )
+    solution = get_optimizer("multiobjective").solve(problem, "compromise")
+    assert solution.selected == ["A"]
+    assert solution.total_implementation_days == 1
+    assert solution.covered_count == 2
+
+
 def test_multiobjective_respects_budget():
     solution = get_optimizer("multiobjective").solve(demo_problem(), "compromise", budget=50_000)
     assert solution.cost <= 50_000
