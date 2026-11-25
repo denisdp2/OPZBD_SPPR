@@ -701,7 +701,7 @@ function renderEvaluation(result = state.lastEvaluation, source = state.resultSo
   $("#evaluation-banner-text").textContent = result.all_mandatory_covered
     ? `Покрыто ${covered.size} из ${requiredSet.size} требований. Общая стоимость рассчитана на выбранный период.`
     : `Не закрыто обязательных требований: ${(result.uncovered_mandatory ?? []).join(", ") || "не определено"}.`;
-  $("#evaluation-banner-status").textContent = source === "server" ? "Расчёт API" : "Примерный расчёт";
+  $("#evaluation-banner-status").textContent = source === "server" ? "" : "Примерный расчёт";
 
   const rows = state.requirements.filter((req) => requiredSet.has(req.id)).map((req) => {
     const isCovered = covered.has(req.id);
@@ -734,17 +734,10 @@ function renderOptimizerOptions() {
   const previous = select.value;
   const available = state.optimizers.filter((optimizer) => supportsMode(optimizer, optimizationMode()));
   select.innerHTML = available.map((optimizer) => (
-    `<option value="${escapeHtml(optimizer.name)}">${escapeHtml(optimizer.title)} · ${optimizer.exact ? "точный" : "приближённый"}${state.usingExampleOptimizers ? " · пример" : ""}</option>`
+    `<option value="${escapeHtml(optimizer.name)}">${escapeHtml(optimizer.title)}</option>`
   )).join("");
   select.value = available.some((optimizer) => optimizer.name === previous)
     ? previous : (available[0]?.name ?? "");
-  updateAlgorithmDescription();
-}
-
-function updateAlgorithmDescription() {
-  const optimizer = state.optimizers.find((entry) => entry.name === $("#algorithm-select").value);
-  $("#algorithm-description").textContent = optimizer?.description
-    || "Алгоритм будет использован при расчёте на сервере.";
 }
 
 function optimizationMode() {
@@ -815,7 +808,7 @@ function renderSolution(solution, source = "example") {
   foot.classList.toggle("is-good", Boolean(solution.feasible));
   foot.classList.toggle("is-bad", !solution.feasible);
   const sourceLabel = source === "server"
-    ? "Результат получен от API."
+    ? ""
     : state.usingExamples
       ? "Локальный пример на демонстрационных данных."
       : "Локальный расчёт по справочникам с сервера; серверный алгоритм пока недоступен.";
@@ -939,10 +932,9 @@ function renderAlgorithmComparison(
   const body = rows.map((row) => {
     const optimizer = row.optimizer ?? {};
     const solution = row.solution;
-    const type = optimizer.exact ? "Точный" : "Приближённый";
     if (!solution) {
       return `<tr>
-        <td><strong>${escapeHtml(optimizer.title || optimizer.name || "Алгоритм")}</strong><small>${type}</small></td>
+        <td><strong>${escapeHtml(optimizer.title || optimizer.name || "Алгоритм")}</strong></td>
         <td><span class="comparison-state is-error">Ошибка</span><small title="${escapeHtml(row.error || "Неизвестная ошибка")}">${escapeHtml(row.error || "Расчёт не выполнен")}</small></td>
         <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
       </tr>`;
@@ -956,7 +948,7 @@ function renderAlgorithmComparison(
     const valid = Boolean(solution.feasible);
 
     return `<tr>
-      <td><strong>${escapeHtml(optimizer.title || optimizer.name || solution.algorithm || "Алгоритм")}</strong><small>${type}</small>${composition}</td>
+      <td><strong>${escapeHtml(optimizer.title || optimizer.name || solution.algorithm || "Алгоритм")}</strong>${composition}</td>
       <td><span class="comparison-state ${valid ? "is-success" : "is-warning"}">${valid ? "Допустимое" : "Не все обязательные"}</span></td>
       <td>${money(solution.cost)}</td>
       <td>${number.format(Number(solution.covered_count) || 0)} / ${number.format(state.selectedRequirements.size)}</td>
@@ -1578,10 +1570,7 @@ function bindEvents() {
   $("#run-evaluation").addEventListener("click", runEvaluation);
   $("#run-optimization").addEventListener("click", runOptimization);
   $("#compare-algorithms")?.addEventListener("click", runAlgorithmComparison);
-  $("#algorithm-select").addEventListener("change", () => {
-    updateAlgorithmDescription();
-    queueDraftSave();
-  });
+  $("#algorithm-select").addEventListener("change", queueDraftSave);
   $("#budget-input").addEventListener("input", invalidateResults);
   $("#compromise-use-budget").addEventListener("change", () => {
     updateModeVisibility();
@@ -1658,7 +1647,6 @@ async function loadPageData(draft = null) {
   renderOptimizerOptions();
   if (state.optimizers.some((optimizer) => optimizer.name === previousAlgorithm && supportsMode(optimizer, optimizationMode()))) {
     $("#algorithm-select").value = previousAlgorithm;
-    updateAlgorithmDescription();
   }
   renderAll();
 }

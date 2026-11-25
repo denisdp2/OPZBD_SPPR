@@ -259,24 +259,23 @@
             <div class="panel-heading"><div><h2>Параметры оптимизации</h2></div></div>
             <label class="control-label" for="algorithm-select">Алгоритм</label>
             <select class="select-control" id="algorithm-select"></select>
-            <p class="control-help" id="algorithm-description">Список зависит от реализованных алгоритмов.</p>
             <label class="control-label label-spaced">Постановка задачи</label>
             <div class="mode-options">
               <label class="mode-option is-selected" data-mode-card="min_cost">
                 <input type="radio" name="opt-mode" value="min_cost" checked>
                 <span class="mode-radio"></span>
-                <span><strong>Взвешенное покрытие</strong><small>Закрыть обязательные требования с минимальными затратами.</small></span>
+                <span><strong>Взвешенное покрытие</strong></span>
               </label>
               <label class="mode-option" data-mode-card="max_coverage">
                 <input type="radio" name="opt-mode" value="max_coverage">
                 <span class="mode-radio"></span>
-                <span><strong>Максимальное покрытие</strong><small>Закрыть как можно больше требований в пределах бюджета.</small></span>
+                <span><strong>Максимальное покрытие</strong></span>
               </label>
             </div>
             <div class="mode-options">
               <label class="mode-option" data-mode-card="compromise">
                 <input type="radio" name="opt-mode" value="compromise">
-                <span><strong>Компромисс между стоимостью и покрытием</strong><small>Выбрать сбалансированный вариант фронта Парето, закрывающий обязательные требования.</small></span>
+                <span><strong>Компромисс по стоимости, покрытию и сроку</strong></span>
               </label>
             </div>
             <div class="budget-field" id="budget-field" hidden>
@@ -351,7 +350,6 @@
           <div id="algorithm-comparison-results">
             <div class="empty-state"><strong>Результаты появятся здесь</strong><p>Нажмите «Сравнить алгоритмы», чтобы запустить все доступные алгоритмы на текущем сценарии.</p></div>
           </div>
-          <p class="algorithm-comparison-note">Для минимизации стоимости отставание считается относительно самого дешёвого допустимого решения. Для максимального покрытия — относительно наибольшего покрытия среди допустимых решений. Многокритериальный алгоритм ищет компромисс между целями.</p>
         </article>
       </section>
     </main>
