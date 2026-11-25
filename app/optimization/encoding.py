@@ -28,8 +28,12 @@ class CoverInstance:
         return len(self.requirement_ids)
 
 
-def popcount(value: int) -> int:
-    return value.bit_count()
+if hasattr(int, "bit_count"):
+    popcount = int.bit_count
+else:
+
+    def popcount(value: int) -> int:
+        return bin(value).count("1")
 
 
 def encode(problem: Problem) -> CoverInstance:

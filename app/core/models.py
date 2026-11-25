@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -51,18 +51,18 @@ class Item(_Model):
     kind: ItemKind
     name: str = Field(..., min_length=1)
     description: str = ""
-    covers: list[str] = Field(default_factory=list)
+    covers: List[str] = Field(default_factory=list)
 
     # Поля, значимые для средств защиты (kind == "tool")
     vendor: str = ""
     fstec_certified: bool = False
-    fstec_cert_no: str | None = None
-    fstec_cert_valid_until: date | None = None
+    fstec_cert_no: Optional[str] = None
+    fstec_cert_valid_until: Optional[date] = None
     in_ru_software_registry: bool = False
-    catalog_price: float | None = Field(None, ge=0, allow_inf_nan=False)
+    catalog_price: Optional[float] = Field(None, ge=0, allow_inf_nan=False)
 
     # Время внедрения в днях.
-    implement_days: float | None = Field(None, ge=0)
+    implement_days: Optional[float] = Field(None, ge=0)
 
 
 class Profile(_Model):
@@ -75,15 +75,15 @@ class Profile(_Model):
     id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
     description: str = ""
-    mandatory: list[str] = Field(default_factory=list)
+    mandatory: List[str] = Field(default_factory=list)
 
 
 class DataBundle(_Model):
     """Полный набор справочников. Формат импорта/экспорта базы целиком."""
 
-    requirements: list[Requirement] = Field(default_factory=list)
-    items: list[Item] = Field(default_factory=list)
-    profiles: list[Profile] = Field(default_factory=list)
+    requirements: List[Requirement] = Field(default_factory=list)
+    items: List[Item] = Field(default_factory=list)
+    profiles: List[Profile] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
@@ -103,13 +103,13 @@ class Candidate(_Model):
 class Scenario(_Model):
     """Что выбрал пользователь в модуле принятия решений."""
 
-    profile_id: str | None = Field(None, description="Профиль обязательности")
-    mandatory: list[str] | None = Field(
+    profile_id: Optional[str] = Field(None, description="Профиль обязательности")
+    mandatory: Optional[List[str]] = Field(
         None, description="Явный список обязательных; если задан, профиль игнорируется"
     )
     period_months: float = Field(12, ge=0, description="Период, мес. (1 знак после запятой)")
-    requirements: list[str] = Field(..., description="Требования, которые рассматриваем")
-    candidates: list[Candidate] = Field(default_factory=list)
+    requirements: List[str] = Field(..., description="Требования, которые рассматриваем")
+    candidates: List[Candidate] = Field(default_factory=list)
 
     @field_validator("period_months")
     @classmethod
@@ -125,12 +125,12 @@ class Scenario(_Model):
 class Problem(_Model):
     """Данные для расчёта, собранные из сценария и справочников."""
 
-    requirements: list[str]
-    mandatory: list[str]
-    items: list[Item]
-    costs: dict[str, float] = Field(description="item_id -> полная стоимость за период")
+    requirements: List[str]
+    mandatory: List[str]
+    items: List[Item]
+    costs: Dict[str, float] = Field(description="item_id -> полная стоимость за период")
     period_months: float
-    implementation_days: dict[str, float] = Field(
+    implementation_days: Dict[str, float] = Field(
         default_factory=dict, description="item_id -> пользовательское время внедрения, дни"
     )
 
@@ -144,9 +144,9 @@ class EvaluationResult(_Model):
     """Результат кнопки «Оценить»."""
 
     all_mandatory_covered: bool
-    uncovered_mandatory: list[str]
-    covered: list[str]
-    uncovered: list[str]
+    uncovered_mandatory: List[str]
+    covered: List[str]
+    uncovered: List[str]
     covered_optional: int
     total_optional: int
     total_cost: float
@@ -155,7 +155,7 @@ class EvaluationResult(_Model):
         ge=0,
         description="Сумма сроков внедрения выбранных позиций, дни",
     )
-    covered_by: dict[str, list[str]] = Field(
+    covered_by: Dict[str, List[str]] = Field(
         default_factory=dict, description="требование -> какие элементы его закрывают"
     )
 
@@ -164,11 +164,11 @@ class Solution(_Model):
     """Один найденный набор элементов."""
 
     algorithm: str
-    selected: list[str]
+    selected: List[str]
     cost: float
     covered_count: int
     feasible: bool = Field(description="Все обязательные требования закрыты")
-    elapsed_ms: float | None = None
+    elapsed_ms: Optional[float] = None
     total_implementation_days: float = Field(
         0,
         ge=0,
@@ -180,7 +180,7 @@ class OptimizeRequest(_Model):
     scenario: Scenario
     algorithm: str
     mode: OptimizeMode = "min_cost"
-    budget: float | None = Field(None, ge=0, description="Обязателен для mode=max_coverage")
+    budget: Optional[float] = Field(None, ge=0, description="Обязателен для mode=max_coverage")
 
 
 class OptimizerInfo(_Model):
@@ -189,7 +189,7 @@ class OptimizerInfo(_Model):
     exact: bool = Field(description="True — точный алгоритм, False — приближённый")
     description: str = ""
     supports_pareto: bool = False
-    supported_modes: list[OptimizeMode] = Field(
+    supported_modes: List[OptimizeMode] = Field(
         default_factory=lambda: ["min_cost", "max_coverage"]
     )
 
@@ -197,4 +197,4 @@ class OptimizerInfo(_Model):
 class ImportReport(_Model):
     importer: str
     imported: int
-    errors: list[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)

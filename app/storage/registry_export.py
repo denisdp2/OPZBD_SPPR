@@ -1,5 +1,7 @@
 """Excel-экспорт текущего отфильтрованного реестра."""
 
+from __future__ import annotations
+
 import io
 
 from openpyxl import Workbook
@@ -42,7 +44,7 @@ def export_registry_xlsx(rows: list[dict]) -> bytes:
     for cell in sheet[1]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="15344C")
-    for column, width in zip("ABCDEF", [24, 65, 60, 27, 22, 75], strict=True):
+    for column, width in zip("ABCDEF", [24, 65, 60, 27, 22, 75]):
         sheet.column_dimensions[column].width = width
     output = io.BytesIO()
     book.save(output)

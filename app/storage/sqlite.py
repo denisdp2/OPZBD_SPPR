@@ -1,32 +1,34 @@
 """Хранилище справочников в SQLite."""
 
-import sqlite3
+from __future__ import annotations
+
 from contextlib import closing
 from pathlib import Path
 
 from app.core.interfaces import NotFoundError, Repository
 from app.core.models import DataBundle, Item, ItemKind, Profile, Requirement
+from app.storage.connection import connect
 
 
 class SQLiteRepository(Repository):
     def __init__(self, path: Path):
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
-        with closing(sqlite3.connect(path)) as con, con:
+        with closing(connect(path)) as con, con:
             con.execute(
                 "CREATE TABLE IF NOT EXISTS catalog "
                 "(kind TEXT, id TEXT, data TEXT NOT NULL, PRIMARY KEY(kind, id))"
             )
 
     def _list(self, kind, model):
-        with closing(sqlite3.connect(self.path)) as con:
+        with closing(connect(self.path)) as con:
             return [
                 model.model_validate_json(row[0])
                 for row in con.execute("SELECT data FROM catalog WHERE kind=? ORDER BY id", (kind,))
             ]
 
     def _get(self, kind, key, model):
-        with closing(sqlite3.connect(self.path)) as con:
+        with closing(connect(self.path)) as con:
             row = con.execute(
                 "SELECT data FROM catalog WHERE kind=? AND id=?", (kind, key)
             ).fetchone()
@@ -35,14 +37,14 @@ class SQLiteRepository(Repository):
         return model.model_validate_json(row[0])
 
     def _put(self, kind, value):
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             con.execute(
                 "INSERT OR REPLACE INTO catalog VALUES (?, ?, ?)",
                 (kind, value.id, value.model_dump_json()),
             )
 
     def _delete(self, kind, key):
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             if not con.execute("DELETE FROM catalog WHERE kind=? AND id=?", (kind, key)).rowcount:
                 raise NotFoundError(key)
 
@@ -66,7 +68,7 @@ class SQLiteRepository(Repository):
         return self._get("items", item_id, Item)
 
     def upsert_item(self, item):
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             self._write_item(con, item)
 
     @staticmethod
@@ -80,7 +82,7 @@ class SQLiteRepository(Repository):
         )
 
     def set_item_price(self, item_id: str, value: float | None) -> None:
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             updated = con.execute(
                 "UPDATE catalog SET data=json_set(data, '$.catalog_price', ?) "
                 "WHERE kind='items' AND id=?",
@@ -95,7 +97,7 @@ class SQLiteRepository(Repository):
     def replace_item_coverage(
         self, item_id: str, expected: list[str], covers: list[str]
     ) -> Item | None:
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             con.execute("BEGIN IMMEDIATE")
             row = con.execute(
                 "SELECT data FROM catalog WHERE kind='items' AND id=?", (item_id,)
@@ -132,7 +134,7 @@ class SQLiteRepository(Repository):
 
     def import_bundle(self, bundle: DataBundle):
         count = 0
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             for kind in ("requirements", "items", "profiles"):
                 for value in getattr(bundle, kind):
                     if kind == "items":
@@ -149,7 +151,7 @@ class SQLiteRepository(Repository):
         """Проверить связи и при подтверждении добавить их в одной транзакции."""
         added = existing = 0
         errors = []
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             con.execute("BEGIN IMMEDIATE" if apply else "BEGIN")
             requirements = {
                 key for (key,) in con.execute("SELECT id FROM catalog WHERE kind='requirements'")

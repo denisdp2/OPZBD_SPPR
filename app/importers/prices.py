@@ -8,17 +8,23 @@ import os
 import re
 import socket
 import ssl
+import sys
 import zipfile
-from typing import Literal
+from typing import List, Literal, Optional, Tuple
 from urllib.parse import urljoin, urlsplit
 from xml.etree import ElementTree
 
 import httpx
-import pdfplumber
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.importers.urls import normalize_urls
+
+if sys.version_info < (3, 9):
+    from pypdf import PdfReader
+else:
+    import pdfplumber
 
 MAX_BYTES = 5_000_000
 PARSER_VERSION = 2
@@ -51,16 +57,21 @@ class PriceCandidate(BaseModel):
 
 
 class PriceResult(BaseModel):
-    status: Literal["ok", "free", "scan", "js", "no_price", "other", "error"]
-    value: float | None = Field(None, ge=0, allow_inf_nan=False)
+    status: Literal['ok', 'free', 'scan', 'js', 'no_price', 'other', 'error']
+    value: Optional[float] = Field(None, ge=0, allow_inf_nan=False)
     note: str = ""
-    candidates: list[PriceCandidate] = Field(default_factory=list)
+    candidates: List[PriceCandidate] = Field(default_factory=list)
     parser_version: int = 1
-    source_url: str | None = None
+    source_url: Optional[str] = None
 
 
-def extract_text(content: bytes) -> tuple[str, str]:
+def extract_text(content: bytes) -> Tuple[str, str]:
     if content.startswith(b"%PDF"):
+        if sys.version_info < (3, 9):
+            pdf = PdfReader(io.BytesIO(content))
+            return "pdf", "\n".join(
+                page.extract_text() or "" for page in pdf.pages[:30]
+            )
         with pdfplumber.open(io.BytesIO(content)) as pdf:
             return "pdf", "\n".join(page.extract_text() or "" for page in pdf.pages[:30])
     if content.startswith(b"PK"):
@@ -85,7 +96,7 @@ def extract_text(content: bytes) -> tuple[str, str]:
     return "html", soup.get_text(" ")
 
 
-def find_prices(text: str) -> list[PriceCandidate]:
+def find_prices(text: str) -> List[PriceCandidate]:
     found = []
     for match in PRICE.finditer(text):
         after = text[match.end() :]
@@ -109,7 +120,7 @@ def find_prices(text: str) -> list[PriceCandidate]:
     return found
 
 
-def product_prices(content: bytes) -> list[PriceCandidate]:
+def product_prices(content: bytes) -> List[PriceCandidate]:
     soup = BeautifulSoup(content, "html.parser")
     for tag in soup(["del", "s"]):
         tag.decompose()
@@ -180,7 +191,7 @@ async def validate_url(url: str) -> None:
     parsed = urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username:
         raise ValueError("Допустимы только внешние HTTP(S) ссылки без авторизации")
-    addresses = await asyncio.to_thread(socket.getaddrinfo, parsed.hostname, parsed.port or 443)
+    addresses = await run_in_threadpool(socket.getaddrinfo, parsed.hostname, parsed.port or 443)
     if not addresses or any(not ipaddress.ip_address(row[4][0]).is_global for row in addresses):
         raise ValueError("Локальные и служебные адреса запрещены")
 
@@ -209,7 +220,7 @@ async def collect_price(client: httpx.AsyncClient, url: str) -> PriceResult:
     for candidate in candidates:
         try:
             content = await asyncio.wait_for(download(client, candidate), timeout=30)
-            parsed = await asyncio.to_thread(classify, content)
+            parsed = await run_in_threadpool(classify, content)
             if parsed.status in {"no_price", "js"}:
                 soup = BeautifulSoup(content, "html.parser")
                 links = []
@@ -223,7 +234,7 @@ async def collect_price(client: httpx.AsyncClient, url: str) -> PriceResult:
                 for link in list(dict.fromkeys(links))[:3]:
                     try:
                         document = await asyncio.wait_for(download(client, link), timeout=25)
-                        price = await asyncio.to_thread(classify, document)
+                        price = await run_in_threadpool(classify, document)
                         if price.status in {"ok", "free"}:
                             return price.model_copy(update={"source_url": link})
                     except (httpx.HTTPError, ValueError, asyncio.TimeoutError):
@@ -234,7 +245,7 @@ async def collect_price(client: httpx.AsyncClient, url: str) -> PriceResult:
         except httpx.HTTPStatusError as exc:
             errors.append(f"HTTP {exc.response.status_code}: {candidate}")
             if candidate.startswith("http://") and exc.response.status_code in {403, 426}:
-                https = "https://" + candidate.removeprefix("http://")
+                https = "https://" + candidate[len("http://") :]
                 if https not in candidates:
                     candidates.append(https)
         except Exception as exc:

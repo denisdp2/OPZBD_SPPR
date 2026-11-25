@@ -1,10 +1,12 @@
 """Независимые группы покрытия и ограничения точного поиска."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from time import perf_counter
 
 from app.optimization.cancel import raise_if_stopped
-from app.optimization.encoding import CoverInstance
+from app.optimization.encoding import CoverInstance, popcount
 
 MAX_STATES = 200_000
 MAX_SECONDS = 10.0
@@ -91,7 +93,7 @@ def combine(
             limits.check(len(merged))
             for right in group:
                 mask = left.mask | right.mask
-                key = ((mask & instance.mandatory_mask).bit_count(), mask.bit_count())
+                key = (popcount(mask & instance.mandatory_mask), popcount(mask))
                 cost = left.cost + right.cost
                 previous = merged.get(key)
                 if previous is None or cost < previous.cost:
@@ -106,11 +108,11 @@ def frontier(
 ) -> list[tuple[list[str], float, int, bool]]:
     result: list[tuple[list[str], float, int, bool]] = []
     best = {True: -1, False: -1}
-    ordered = sorted(rows, key=lambda row: (row.cost, -row.mask.bit_count()))
+    ordered = sorted(rows, key=lambda row: (row.cost, -popcount(row.mask)))
     seen = set()
     for row in ordered:
         raise_if_stopped()
-        covered = row.mask.bit_count()
+        covered = popcount(row.mask)
         feasible = row.mask & instance.mandatory_mask == instance.mandatory_mask
         key = (row.cost, covered, feasible)
         if key in seen:
@@ -141,19 +143,19 @@ def pick(
     ]
     if feasible:
         key = (
-            (lambda row: (row.cost, -row.mask.bit_count()))
+            (lambda row: (row.cost, -popcount(row.mask)))
             if mode == "min_cost"
-            else (lambda row: (-row.mask.bit_count(), row.cost))
+            else (lambda row: (-popcount(row.mask), row.cost))
         )
         chosen = min(feasible, key=key)
     else:
         chosen = min(
             rows,
             key=lambda row: (
-                -(row.mask & instance.mandatory_mask).bit_count(),
-                -row.mask.bit_count(),
+                -popcount(row.mask & instance.mandatory_mask),
+                -popcount(row.mask),
                 row.cost,
             ),
             default=Choice(0, 0.0, ()),
         )
-    return list(chosen.selected), chosen.cost, chosen.mask.bit_count(), bool(feasible)
+    return list(chosen.selected), chosen.cost, popcount(chosen.mask), bool(feasible)

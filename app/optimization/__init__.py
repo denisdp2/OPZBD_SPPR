@@ -1,5 +1,7 @@
 """Алгоритмы подбора набора средств и мер."""
 
+from __future__ import annotations
+
 from app.core.models import OptimizerInfo
 from app.optimization.solvers import OPTIMIZERS
 

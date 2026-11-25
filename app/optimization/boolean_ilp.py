@@ -1,12 +1,14 @@
 """Точное покрытие: динамика по маскам внутри независимых групп требований."""
 
+from __future__ import annotations
+
 from app.optimization.encoding import CoverInstance
 from app.optimization.search import Choice, SearchBudget, combine, components, frontier, pick
 
 
 def _choices(instance: CoverInstance, limits: SearchBudget) -> list[Choice]:
     states = {0: Choice(0, 0.0, ())}
-    for item_id, cost, mask in zip(instance.item_ids, instance.costs, instance.masks, strict=True):
+    for item_id, cost, mask in zip(instance.item_ids, instance.costs, instance.masks):
         limits.check(len(states))
         for step, row in enumerate(list(states.values())):
             if step % 1024 == 0:

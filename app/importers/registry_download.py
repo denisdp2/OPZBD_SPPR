@@ -1,5 +1,7 @@
 """Загрузка выгрузок; исключение проверки сертификата ограничено хостом реестра."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 from zipfile import BadZipFile, ZipFile

@@ -1,5 +1,7 @@
 """Оркестрация импорта и фонового сбора цен, независимо от HTTP и интерфейса."""
 
+from __future__ import annotations
+
 import asyncio
 from collections import defaultdict
 from itertools import islice
@@ -8,6 +10,7 @@ from threading import Event, Lock
 from urllib.parse import urlsplit
 
 import httpx
+from starlette.concurrency import run_in_threadpool
 
 from app.core.interfaces import Repository
 from app.core.models import DataBundle, ImportReport
@@ -134,7 +137,7 @@ class RegistryService:
                     if self.stop_requested.is_set():
                         return
                     result = await collect_price(client, url)
-                await asyncio.to_thread(self.store.save_price, numbers, result, url)
+                await run_in_threadpool(self.store.save_price, numbers, result, url)
                 with self.lock:
                     self.job["done"] += 1
                     self.job["errors"] += result.status == "error"

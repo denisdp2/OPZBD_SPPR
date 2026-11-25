@@ -1,5 +1,7 @@
 """Нормализация ссылок из выгрузок: Unicode, HTML-сущности и примечания."""
 
+from __future__ import annotations
+
 import html
 import re
 import unicodedata

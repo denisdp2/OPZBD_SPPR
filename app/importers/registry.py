@@ -1,5 +1,7 @@
 """Разбор Excel-выгрузки реестра российского ПО без доступа к БД и сети."""
 
+from __future__ import annotations
+
 import html
 import json
 import re
@@ -178,7 +180,7 @@ class RegistryImporter(Importer):
                 continue
             try:
                 # Excel может хранить целые номера в числовых ячейках.
-                reg = int(raw.removesuffix(".0"))
+                reg = int(raw[:-2] if raw.endswith(".0") else raw)
                 if reg in seen:
                     raise ValueError(f"повтор номера {reg}")
                 values["reg_number"] = reg

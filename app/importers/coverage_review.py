@@ -1,5 +1,7 @@
 """Предложения по покрытию и обмен таблицами проверки."""
 
+from __future__ import annotations
+
 import re
 from collections.abc import Iterable
 from io import BytesIO
@@ -79,7 +81,7 @@ def review_workbook(rows: Iterable[tuple]) -> bytes:
     book = Workbook(write_only=True)
     sheet = book.create_sheet("Соответствия")
     sheet.freeze_panes = "C2"
-    for column, width in zip("ABCDEFGH", (24, 20, 55, 45, 55, 45, 25, 20), strict=True):
+    for column, width in zip("ABCDEFGH", (24, 20, 55, 45, 55, 45, 25, 20)):
         sheet.column_dimensions[column].width = width
     sheet.append(
         (

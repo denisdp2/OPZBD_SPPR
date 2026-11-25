@@ -50,3 +50,18 @@ def test_evaluate_uses_catalog_coverage_and_cost(client):
     }
     scenario["requirements"] = ["unknown"]
     assert client.post("/api/evaluate", json=scenario).status_code == 422
+
+
+def test_frontend_modules_have_javascript_content_type(tmp_path, monkeypatch):
+    import mimetypes
+
+    from fastapi.testclient import TestClient
+
+    from app.api import create_app
+
+    mimetypes.init()
+    monkeypatch.setitem(mimetypes.types_map, ".js", "text/plain")
+    monkeypatch.setenv("SZI_DATA_DIR", str(tmp_path))
+    response = TestClient(create_app()).get("/static/assets/js/pages/auth-page.js")
+    assert response.status_code == 200
+    assert response.headers["content-type"].split(";")[0] == "text/javascript"

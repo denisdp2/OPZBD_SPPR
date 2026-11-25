@@ -10,7 +10,7 @@ const views = {
 const tabs = [...document.querySelectorAll(".auth-tab")];
 
 function showView(name) {
-  if (!Object.hasOwn(views, name)) return;
+  if (!Object.prototype.hasOwnProperty.call(views, name)) return;
 
   Object.entries(views).forEach(([key, section]) => {
     section.hidden = key !== name;

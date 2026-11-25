@@ -3,14 +3,13 @@
 Подбор набора идёт через алгоритмы из app.optimization. Описание API: /docs.
 """
 
-import asyncio
 import json
+import mimetypes
 import sqlite3
 import threading
-from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Callable, Dict, List, Literal, Optional, Tuple
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
@@ -30,6 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import BaseModel, Field, ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from app import __version__, paths
 from app.auth.deps import COOKIE_NAME, current_user, require_admin, require_login
@@ -77,17 +77,17 @@ from app.storage.sqlite import SQLiteRepository
 
 
 class CatalogPriceUpdate(BaseModel):
-    value: float | None = Field(ge=0, allow_inf_nan=False)
+    value: Optional[float] = Field(ge=0, allow_inf_nan=False)
 
 
 class ItemCoverageUpdate(BaseModel):
-    expected: list[str]
-    covers: list[str]
+    expected: List[str]
+    covers: List[str]
 
 
 def create_app(
-    repo: Repository | None = None,
-    on_shutdown: Callable[[], None] | None = None,
+    repo: Optional[Repository] = None,
+    on_shutdown: Optional[Callable[[], None]] = None,
 ) -> FastAPI:
     app = FastAPI(title="СППР: подбор средств и мер защиты", version=__version__)
     repo = repo if repo is not None else SQLiteRepository(paths.data_dir() / "catalog.sqlite3")
@@ -135,7 +135,7 @@ def create_app(
         return AuthUser(id=user.id, login=user.login, role=user.role)
 
     @api.get("/users/{user_id}/draft", tags=["scenario"])
-    def read_draft(user_id: int, user: User = Depends(require_login)) -> UserDraft | None:
+    def read_draft(user_id: int, user: User = Depends(require_login)) -> Optional[UserDraft]:
         if user_id != user.id:
             raise HTTPException(status_code=403, detail="Черновик принадлежит другому аккаунту")
         data = auth.read_draft(user.id)
@@ -170,7 +170,7 @@ def create_app(
         return {"status": "ok"}
 
     @api.get("/auth/me", tags=["auth"])
-    def me(user: User | None = Depends(current_user)) -> AuthUser:
+    def me(user: Optional[User] = Depends(current_user)) -> AuthUser:
         if user is None:
             raise HTTPException(status_code=401, detail="Нужна авторизация")
         return AuthUser(id=user.id, login=user.login, role=user.role)
@@ -179,11 +179,11 @@ def create_app(
     #  Справочники
     # ------------------------------------------------------------------ #
     @api.get("/requirements", tags=["catalog"])
-    def list_requirements() -> list[Requirement]:
+    def list_requirements() -> List[Requirement]:
         return repo.list_requirements()
 
     @api.get("/items", tags=["catalog"])
-    def list_items(kind: ItemKind | None = None) -> list[Item]:
+    def list_items(kind: Optional[ItemKind] = None) -> List[Item]:
         items = repo.list_items(kind)
         if kind == "org":
             return items
@@ -196,7 +196,7 @@ def create_app(
         ]
 
     @api.get("/profiles", tags=["catalog"])
-    def list_profiles() -> list[Profile]:
+    def list_profiles() -> List[Profile]:
         return repo.list_profiles()
 
     # ------------------------------------------------------------------ #
@@ -220,7 +220,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Алгоритм не найден") from exc
 
     @api.get("/optimizers", tags=["decision"])
-    def list_optimizers() -> list[OptimizerInfo]:
+    def list_optimizers() -> List[OptimizerInfo]:
         return optimizer_catalog()
 
     def run_cancellable(fn):
@@ -258,7 +258,7 @@ def create_app(
             )
         event, wrapped = run_cancellable(lambda: optimizer.solve(problem, req.mode, req.budget))
         try:
-            return await asyncio.to_thread(wrapped)
+            return await run_in_threadpool(wrapped)
         except OptimizationCancelled as exc:
             raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
         except ValueError as exc:
@@ -268,13 +268,13 @@ def create_app(
                 app.state.opt_cancel = None
 
     @api.post("/pareto", tags=["decision"])
-    async def pareto(req: OptimizeRequest) -> list[Solution]:
+    async def pareto(req: OptimizeRequest) -> List[Solution]:
         """Парето-фронт «стоимость / число закрытых требований»."""
         problem = problem_from(req.scenario)
         optimizer = optimizer_from(req.algorithm)
         event, wrapped = run_cancellable(lambda: optimizer.pareto(problem))
         try:
-            return await asyncio.to_thread(wrapped)
+            return await run_in_threadpool(wrapped)
         except OptimizationCancelled as exc:
             raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
         except NotImplementedError as exc:
@@ -286,12 +286,12 @@ def create_app(
                 app.state.opt_cancel = None
 
     @api.post("/pareto/3d", tags=["decision"])
-    async def pareto_3d(req: OptimizeRequest) -> list[Solution]:
+    async def pareto_3d(req: OptimizeRequest) -> List[Solution]:
         """Трёхкритериальный фронт: стоимость↓, срок внедрения↓, покрытие↑."""
         problem = problem_from(req.scenario)
         event, wrapped = run_cancellable(lambda: pareto_front_3d(problem))
         try:
-            return await asyncio.to_thread(wrapped)
+            return await run_in_threadpool(wrapped)
         except OptimizationCancelled as exc:
             raise HTTPException(status_code=499, detail="Расчёт остановлен") from exc
         except ValueError as exc:
@@ -335,7 +335,7 @@ def create_app(
         item = repo.get_item(item_id)
         if item.kind != "tool":
             raise HTTPException(status_code=422, detail="Цена каталога задаётся для средств защиты")
-        number = item_id.removeprefix("ru-software-")
+        _, _, number = item_id.partition("ru-software-")
         if (
             item_id == f"ru-software-{number}"
             and number.isascii()
@@ -350,7 +350,7 @@ def create_app(
     @admin.delete("/items/{item_id}")
     def delete_item(item_id: str) -> dict:
         repo.delete_item(item_id)
-        number = item_id.removeprefix("ru-software-")
+        _, _, number = item_id.partition("ru-software-")
         if number.isascii() and number.isdecimal() and item_id == f"ru-software-{number}":
             if len(number) <= 18:
                 registry.store.delete_record(int(number))
@@ -386,7 +386,7 @@ def create_app(
         return {"status": "ok"}
 
     @admin.get("/gaps")
-    def gaps() -> list[Requirement]:
+    def gaps() -> List[Requirement]:
         """Требования, которые не закрывает ни одно средство или мера."""
         return repo.uncovered_requirements()
 
@@ -409,9 +409,14 @@ def create_app(
     @admin.get("/items/{item_id}/coverage/suggestions")
     def item_coverage_suggestions(item_id: str) -> dict:
         item = repo.get_item(item_id)
-        number = item_id.removeprefix("ru-software-")
+        _, _, number = item_id.partition("ru-software-")
         record = None
-        if item.kind == "tool" and item_id != number and number.isascii() and number.isdecimal():
+        if (
+            item.kind == "tool"
+            and item_id.startswith("ru-software-")
+            and number.isascii()
+            and number.isdecimal()
+        ):
             if len(number) <= 18:
                 record = registry.store.get_record(int(number))
         requirements = {req.id: req for req in repo.list_requirements()}
@@ -511,7 +516,7 @@ def create_app(
             file.file.close()
 
     @admin.get("/users")
-    def users() -> list[AuthUser]:
+    def users() -> List[AuthUser]:
         return [
             AuthUser(id=user.id, login=user.login, role=user.role) for user in auth.list_users()
         ]
@@ -560,11 +565,11 @@ def create_app(
         q: str = "",
         offset: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=200),
-        state: Literal["active", "excluded"] = "active",
+        state: Literal['active', 'excluded'] = "active",
         sort: Literal[
             "reg_number", "id", "name", "covers", "owner", "status", "value", "source"
         ] = "id",
-        direction: Literal["asc", "desc"] = "asc",
+        direction: Literal['asc', 'desc'] = "asc",
     ) -> dict:
         if isinstance(repo, SQLiteRepository) and repo.path == registry.store.path:
             return registry.store.tools_page(q, state, sort, direction == "desc", offset, limit)
@@ -609,9 +614,9 @@ def create_app(
         q: str = "",
         offset: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=200),
-        state: Literal["active", "excluded", "all"] = "active",
-        sort: Literal["reg_number", "name", "owner", "status", "value", "source"] = "reg_number",
-        direction: Literal["asc", "desc"] = "asc",
+        state: Literal['active', 'excluded', 'all'] = "active",
+        sort: Literal['reg_number', 'name', 'owner', 'status', 'value', 'source'] = "reg_number",
+        direction: Literal['asc', 'desc'] = "asc",
     ) -> dict:
         records = registry.store.query(q, state, sort, direction == "desc")
         return {"total": len(records), "items": records[offset : offset + limit]}
@@ -619,9 +624,9 @@ def create_app(
     @admin.get("/registry/export.xlsx")
     def registry_excel(
         q: str = "",
-        state: Literal["active", "excluded", "all"] = "active",
-        sort: Literal["reg_number", "name", "owner", "status", "value", "source"] = "reg_number",
-        direction: Literal["asc", "desc"] = "asc",
+        state: Literal['active', 'excluded', 'all'] = "active",
+        sort: Literal['reg_number', 'name', 'owner', 'status', 'value', 'source'] = "reg_number",
+        direction: Literal['asc', 'desc'] = "asc",
     ) -> Response:
         content = export_registry_xlsx(registry.store.query(q, state, sort, direction == "desc"))
         return Response(
@@ -631,10 +636,10 @@ def create_app(
         )
 
     @admin.get("/registry/import-status")
-    def registry_import_status() -> dict[str, str | None]:
+    def registry_import_status() -> Dict[str, Optional[str]]:
         return registry.store.import_status()
 
-    def save_registry_export(format: str, *, allow_cached: bool = True) -> tuple[Path, bool]:
+    def save_registry_export(format: str, *, allow_cached: bool = True) -> Tuple[Path, bool]:
         cache = paths.data_dir() / "registry-cache" / f"registry.{format}"
         try:
             cache.parent.mkdir(parents=True, exist_ok=True)
@@ -664,7 +669,7 @@ def create_app(
             raise HTTPException(status_code=502, detail=message) from exc
 
     @admin.post("/registry/update/{format}")
-    def update_registry(format: Literal["xml", "xlsx"]) -> ImportReport:
+    def update_registry(format: Literal['xml', 'xlsx']) -> ImportReport:
         path, _ = save_registry_export(format, allow_cached=False)
         try:
             report = registry.import_file(path)
@@ -679,12 +684,12 @@ def create_app(
         return report
 
     @admin.post("/registry/download/{format}")
-    def save_official(format: Literal["xml", "xls", "xlsx"]) -> dict:
+    def save_official(format: Literal['xml', 'xls', 'xlsx']) -> dict:
         path, cached = save_registry_export(format)
         return {"path": str(path.resolve()), "cached": cached}
 
     @admin.get("/registry/download/{format}")
-    def download_official(format: Literal["xml", "html", "xls", "xlsx"]):
+    def download_official(format: Literal['xml', 'html', 'xls', 'xlsx']):
         path, cached = save_registry_export(format)
         return FileResponse(
             path, filename=path.name, headers={"X-Registry-Source": "cache"} if cached else {}
@@ -721,7 +726,7 @@ def create_app(
     @admin.get("/export")
     def export(
         response: Response,
-        part: Literal["all", "requirements", "tools", "org"] = "all",
+        part: Literal['all', 'requirements', 'tools', 'org'] = "all",
         download: bool = False,
     ) -> DataBundle:
         if download:
@@ -741,6 +746,8 @@ def create_app(
     # ------------------------------------------------------------------ #
     front = paths.frontend_dir()
     if front.is_dir():
+        # Windows may take the JavaScript MIME type from the user's registry.
+        mimetypes.add_type("text/javascript", ".js")
         app.mount("/static", StaticFiles(directory=front), name="static")
 
         if (front / "index.html").is_file():
@@ -750,7 +757,7 @@ def create_app(
                 return FileResponse(front / "index.html")
 
         @app.get("/admin", include_in_schema=False)
-        def admin_page(user: User | None = Depends(current_user)):
+        def admin_page(user: Optional[User] = Depends(current_user)):
             if user is None:
                 return RedirectResponse("/", status_code=303)
             if user.role != "admin":

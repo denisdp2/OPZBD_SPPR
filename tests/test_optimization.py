@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from app.core.models import Candidate, Item, OptimizeRequest, Problem, Requirement, Scenario
 from app.optimization import get_optimizer, list_optimizers
 

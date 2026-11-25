@@ -18,14 +18,14 @@ from math import isfinite
 from app.core.models import Problem, Solution
 from app.core.problem import make_solution
 from app.optimization.cancel import raise_if_stopped
-from app.optimization.encoding import encode
+from app.optimization.encoding import encode, popcount
 from app.optimization.search import SearchBudget, components
 
 _EPS = 1e-9
 _MAX_LABELS = 150_000
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class _Label:
     cost: float
     days: float
@@ -159,7 +159,7 @@ def pareto_front_3d(problem: Problem, *, max_labels: int = _MAX_LABELS) -> list[
     combined: dict[tuple[int, int], list[_Label]] = {(0, 0): [_Label(0.0, 0.0, ())]}
     for group in components(instance):
         states: dict[int, list[_Label]] = {0: [_Label(0.0, 0.0, ())]}
-        for item_id, cost, mask in zip(group.item_ids, group.costs, group.masks, strict=True):
+        for item_id, cost, mask in zip(group.item_ids, group.costs, group.masks):
             days = float(problem.implementation_days.get(item_id, 0.0))
             if not isfinite(cost) or not isfinite(days) or cost < 0 or days < 0:
                 raise ValueError(f"Некорректные стоимость или срок для позиции «{item_id}»")
@@ -177,7 +177,7 @@ def pareto_front_3d(problem: Problem, *, max_labels: int = _MAX_LABELS) -> list[
         for (covered, hits), prefixes in combined.items():
             for mask, labels in states.items():
                 limits.check()
-                key = (covered + mask.bit_count(), hits + (mask & group.mandatory_mask).bit_count())
+                key = (covered + popcount(mask), hits + popcount(mask & group.mandatory_mask))
                 bucket = merged.setdefault(key, [])
                 for left in prefixes:
                     for right in labels:
@@ -191,7 +191,7 @@ def pareto_front_3d(problem: Problem, *, max_labels: int = _MAX_LABELS) -> list[
                         )
             check(sum(map(len, merged.values())))
         combined = merged
-    mandatory_count = instance.mandatory_mask.bit_count()
+    mandatory_count = popcount(instance.mandatory_mask)
     known_mandatory = set(problem.mandatory) <= set(instance.requirement_ids)
     candidates = [
         Solution(

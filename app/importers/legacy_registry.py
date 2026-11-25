@@ -1,5 +1,7 @@
 """Чтение результатов прежних скриптов. Исходная SQLite-база открывается только для чтения."""
 
+from __future__ import annotations
+
 import sqlite3
 from collections import defaultdict
 from contextlib import closing

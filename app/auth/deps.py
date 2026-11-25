@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import HTTPException, Request
 
 from app.auth.store import AuthStore, User
@@ -13,7 +15,7 @@ def auth_store(request: Request) -> AuthStore:
     return request.app.state.auth
 
 
-def current_user(request: Request) -> User | None:
+def current_user(request: Request) -> Optional[User]:
     return auth_store(request).user_for_token(request.cookies.get(COOKIE_NAME))
 
 

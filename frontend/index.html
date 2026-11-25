@@ -14,6 +14,12 @@
   <main class="auth-shell">
     <div class="card auth-card-panel">
       <div class="brand-name">СППР</div>
+      <p id="unsupported-browser" role="alert" hidden>
+        Для работы СППР откройте эту страницу в Firefox ESR 115 или более новом браузере.
+      </p>
+      <script nomodule>
+        document.getElementById("unsupported-browser").removeAttribute("hidden");
+      </script>
       <nav class="auth-tabs" aria-label="Учётная запись">
         <button class="btn auth-tab" type="button" aria-current="page" data-view="login">Вход</button>
         <button class="btn secondary auth-tab" type="button" data-view="register">Регистрация</button>
@@ -21,7 +27,7 @@
 
       <section id="login-view" aria-labelledby="login-title">
         <h1 id="login-title">Вход</h1>
-        <form id="login-form" novalidate>
+        <form id="login-form" method="post" novalidate>
           <label for="login-name">Логин</label>
           <input id="login-name" name="login" type="text" autocomplete="username" required maxlength="64">
           <label for="login-password">Пароль</label>
@@ -39,7 +45,7 @@
 
       <section id="register-view" aria-labelledby="register-title" hidden>
         <h1 id="register-title">Регистрация</h1>
-        <form id="register-form" novalidate>
+        <form id="register-form" method="post" novalidate>
           <label for="register-name">Логин</label>
           <input id="register-name" name="login" type="text" autocomplete="username" required minlength="3" maxlength="64" aria-describedby="register-login-hint">
           <p class="auth-hint" id="register-login-hint">Не менее 3 символов.</p>

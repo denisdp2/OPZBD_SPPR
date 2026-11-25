@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import List, Tuple
 
-from app.optimization.encoding import INF, CoverInstance
+from app.optimization.encoding import INF, CoverInstance, popcount
 from app.optimization.search import Choice, SearchBudget, combine, components, frontier, pick
 
-Point = tuple[list[str], float, int, bool]
+Point = Tuple[List[str], float, int, bool]
 
 
 def _extra_cost(instance: CoverInstance, mask: int) -> float:
@@ -19,7 +20,7 @@ def _extra_cost(instance: CoverInstance, mask: int) -> float:
         if missing & (1 << bit) == 0:
             continue
         cheapest = INF
-        for cost, item_mask in zip(instance.costs, instance.masks, strict=True):
+        for cost, item_mask in zip(instance.costs, instance.masks):
             if item_mask & (1 << bit):
                 cheapest = min(cheapest, cost)
         extra = max(extra, cheapest)
@@ -33,7 +34,7 @@ def _metrics(instance: CoverInstance, chosen: list[int], budget: float | None) -
     for j in chosen:
         mask |= instance.masks[j]
         cost += instance.costs[j]
-    covered = mask.bit_count()
+    covered = popcount(mask)
     feasible = (mask & instance.mandatory_mask) == instance.mandatory_mask
     if budget is not None and cost > budget + 1e-12:
         feasible = False
@@ -89,7 +90,7 @@ def branch_bound_solve(
     order = sorted(
         range(instance.n),
         key=lambda j: (
-            instance.costs[j] / max((instance.masks[j] & instance.mandatory_mask).bit_count(), 1),
+            instance.costs[j] / max(popcount(instance.masks[j] & instance.mandatory_mask), 1),
             instance.costs[j],
             j,
         ),
@@ -110,7 +111,7 @@ def branch_bound_solve(
         nonlocal best_chosen, best_cost, best_covered, found, effort
         if budget is not None and cost > budget + 1e-12:
             return
-        covered = mask.bit_count()
+        covered = popcount(mask)
         feasible = (mask & instance.mandatory_mask) == instance.mandatory_mask
         if feasible and _better(mode, cost, covered, best_cost, best_covered):
             best_chosen = list(chosen)
@@ -120,7 +121,7 @@ def branch_bound_solve(
             return
         if found or feasible:
             return
-        hits = (mask & instance.mandatory_mask).bit_count()
+        hits = popcount(mask & instance.mandatory_mask)
         _sel, effort_cost, effort_cov, effort_hits = effort
         better_effort = hits > effort_hits or (
             hits == effort_hits
@@ -140,8 +141,8 @@ def branch_bound_solve(
         if found and possible & instance.mandatory_mask != instance.mandatory_mask:
             return
         if not found and effort is not None:
-            hits = (possible & instance.mandatory_mask).bit_count()
-            if hits < effort[3] or (hits == effort[3] and possible.bit_count() < effort[2]):
+            hits = popcount(possible & instance.mandatory_mask)
+            if hits < effort[3] or (hits == effort[3] and popcount(possible) < effort[2]):
                 return
         if budget is not None and cost > budget + 1e-12:
             return
@@ -149,7 +150,7 @@ def branch_bound_solve(
             if cost > best_cost + 1e-12 or cost + _extra_cost(instance, mask) > best_cost + 1e-12:
                 return
         if mode == "max_coverage" and found:
-            if (mask | suffix_union[pos]).bit_count() < best_covered:
+            if popcount(mask | suffix_union[pos]) < best_covered:
                 return
         if pos == instance.n:
             consider(chosen, cost, mask)
@@ -203,7 +204,7 @@ def _component_pareto(instance: CoverInstance, limits: SearchBudget) -> list[Cho
         return _component_choices(instance, limits)
     order = sorted(
         range(instance.n),
-        key=lambda j: (instance.costs[j] / max(instance.masks[j].bit_count(), 1), j),
+        key=lambda j: (instance.costs[j] / max(popcount(instance.masks[j]), 1), j),
     )
     suffix = [0] * (instance.n + 1)
     for pos in range(instance.n - 1, -1, -1):
@@ -222,7 +223,7 @@ def _component_pareto(instance: CoverInstance, limits: SearchBudget) -> list[Cho
         upper: Point = (
             [],
             cost,
-            possible.bit_count(),
+            popcount(possible),
             possible & instance.mandatory_mask == instance.mandatory_mask,
         )
         for point in points:
@@ -233,7 +234,7 @@ def _component_pareto(instance: CoverInstance, limits: SearchBudget) -> list[Cho
             (
                 list(selected),
                 cost,
-                mask.bit_count(),
+                popcount(mask),
                 mask & instance.mandatory_mask == instance.mandatory_mask,
             ),
         )
@@ -246,7 +247,7 @@ def _component_pareto(instance: CoverInstance, limits: SearchBudget) -> list[Cho
         dfs(pos + 1, selected, cost, mask)
 
     dfs(0, [], 0.0, 0)
-    masks = dict(zip(instance.item_ids, instance.masks, strict=True))
+    masks = dict(zip(instance.item_ids, instance.masks))
     rows = []
     for selected, cost, _, _ in points:
         mask = 0

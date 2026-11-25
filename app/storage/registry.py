@@ -1,6 +1,7 @@
 """Хранилище метаданных и цен Реестра российского ПО."""
 
-import sqlite3
+from __future__ import annotations
+
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +10,7 @@ from app.core.models import Item
 from app.importers.prices import PriceResult
 from app.importers.registry import RegistryRecord
 from app.importers.urls import canonical_links, source_url
+from app.storage.connection import connect
 
 _REGISTRY_PRICE = """COALESCE(manual_price, CASE
     WHEN json_extract(price, '$.status') IN ('ok', 'free')
@@ -18,7 +20,7 @@ _REGISTRY_PRICE = """COALESCE(manual_price, CASE
 class RegistryStore:
     def __init__(self, path: Path):
         self.path = path
-        with closing(sqlite3.connect(path)) as con, con:
+        with closing(connect(path)) as con, con:
             con.execute(
                 "CREATE TABLE IF NOT EXISTS registry "
                 "(reg_number INTEGER PRIMARY KEY, data TEXT NOT NULL, "
@@ -34,18 +36,18 @@ class RegistryStore:
             )
 
     def set_manual_price(self, number: int, value: float | None) -> bool:
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             cursor = con.execute(
                 "UPDATE registry SET manual_price=? WHERE reg_number=?", (value, number)
             )
             return cursor.rowcount > 0
 
     def delete_record(self, number: int) -> None:
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             con.execute("DELETE FROM registry WHERE reg_number=?", (number,))
 
     def catalog_prices(self) -> dict[str, float | None]:
-        with closing(sqlite3.connect(self.path)) as con:
+        with closing(connect(self.path)) as con:
             return dict(
                 con.execute(f"SELECT 'ru-software-' || reg_number, {_REGISTRY_PRICE} FROM registry")
             )
@@ -57,7 +59,7 @@ class RegistryStore:
         imported: bool = False,
         source_date: str | None = None,
     ) -> None:
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             for record in records:
                 old = con.execute(
                     "SELECT data FROM registry WHERE reg_number=?", (record.reg_number,)
@@ -84,7 +86,7 @@ class RegistryStore:
                 )
 
     def import_status(self) -> dict[str, str | None]:
-        with closing(sqlite3.connect(self.path)) as con:
+        with closing(connect(self.path)) as con:
             values = dict(con.execute("SELECT key, value FROM registry_metadata"))
         return {
             "last_import_at": values.get("last_import_at"),
@@ -92,19 +94,19 @@ class RegistryStore:
         }
 
     def coverage_records(self) -> list[RegistryRecord]:
-        with closing(sqlite3.connect(self.path)) as con:
+        with closing(connect(self.path)) as con:
             return [
                 RegistryRecord.model_validate_json(data)
                 for (data,) in con.execute("SELECT data FROM registry")
             ]
 
     def get_record(self, number: int) -> RegistryRecord | None:
-        with closing(sqlite3.connect(self.path)) as con:
+        with closing(connect(self.path)) as con:
             row = con.execute("SELECT data FROM registry WHERE reg_number=?", (number,)).fetchone()
         return RegistryRecord.model_validate_json(row[0]) if row else None
 
     def list_records(self) -> list[dict]:
-        with closing(sqlite3.connect(self.path)) as con:
+        with closing(connect(self.path)) as con:
             return [
                 dict(
                     record=RegistryRecord.model_validate_json(data).model_dump(),
@@ -151,7 +153,7 @@ class RegistryStore:
         """
         query = q.strip().casefold()
         params = (state == "excluded", query, query)
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             con.create_function("casefold", 1, str.casefold, deterministic=True)
             con.execute("BEGIN")
             total = con.execute(base + "SELECT COUNT(*) FROM tools " + where, params).fetchone()[0]
@@ -224,7 +226,7 @@ class RegistryStore:
         return sorted(known, key=key, reverse=descending) + unknown
 
     def save_price(self, numbers: list[int], result: PriceResult, url: str) -> None:
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             for number in numbers:
                 old = con.execute(
                     "SELECT data FROM registry WHERE reg_number=?", (number,)
@@ -239,7 +241,7 @@ class RegistryStore:
                     )
 
     def restore_prices(self, results: dict[int, PriceResult]) -> None:
-        with closing(sqlite3.connect(self.path)) as con, con:
+        with closing(connect(self.path)) as con, con:
             con.executemany(
                 "UPDATE registry SET price=? WHERE reg_number=?",
                 [(value.model_dump_json(), number) for number, value in results.items()],

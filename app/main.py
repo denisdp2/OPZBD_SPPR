@@ -7,10 +7,15 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
+import os
 import socket
+import subprocess
+import sys
 import threading
 import webbrowser
+from pathlib import Path
 
 import uvicorn
 
@@ -32,6 +37,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def open_browser(url: str) -> None:
+    if sys.platform == "win32":
+        if paths.is_frozen():
+            portable = Path(sys.executable).resolve().parent.parent / "browser" / "firefox.exe"
+            if portable.is_file():
+                profile = paths.data_dir() / "browser-profile"
+                profile.mkdir(parents=True, exist_ok=True)
+                subprocess.Popen([str(portable), "-profile", str(profile), url])
+                return
+
+        if sys.getwindowsversion().major < 10:
+            for variable in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "LOCALAPPDATA"):
+                folder = os.environ.get(variable)
+                if folder:
+                    firefox = Path(folder) / "Mozilla Firefox" / "firefox.exe"
+                    if firefox.is_file():
+                        subprocess.Popen([str(firefox), url])
+                        return
+            print(
+                "Откройте адрес в Firefox ESR 115. Internet Explorer не поддерживается.", flush=True
+            )
+            return
+
+    webbrowser.open(url)
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -51,13 +82,20 @@ def main(argv: list[str] | None = None) -> None:
     config = uvicorn.Config(app, host=args.host, port=port, log_level="warning")
     server = uvicorn.Server(config)
 
+    if sys.platform == "win32" and sys.version_info[:2] == (3, 8):
+        # The legacy Windows runtime can raise WinError 10054 in Proactor while closing sockets.
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     print(f"СППР {__version__}")
     print(f"Данные: {paths.data_dir()}")
     print(f"Откройте в браузере: {url}")
-    print("Для завершения закройте это окно или нажмите «Завершить работу» в интерфейсе.")
+    print(
+        "Для завершения закройте это окно или нажмите «Завершить работу» в интерфейсе.",
+        flush=True,
+    )
 
     if not args.no_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.0, open_browser, args=(url,)).start()
     server.run()
 
 

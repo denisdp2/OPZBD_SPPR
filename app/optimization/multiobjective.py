@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import List, Tuple
 
 from app.core.cover import expand_covers
 from app.core.models import Problem, Solution
@@ -10,7 +11,7 @@ from app.optimization.boolean_ilp import exact_pareto
 from app.optimization.encoding import CoverInstance
 from app.optimization.pareto_3d import pareto_front_3d
 
-Point = tuple[list[str], float, int, bool]
+Point = Tuple[List[str], float, int, bool]
 
 
 def _ideal_distance(points: list[Solution]) -> Solution:
